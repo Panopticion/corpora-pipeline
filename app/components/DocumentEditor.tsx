@@ -165,6 +165,154 @@ function ParsingIndicator() {
   );
 }
 
+// ─── Per-document pipeline indicator ─────────────────────────────────────
+
+type NextAction =
+  | { kind: "chunk"; label: string }
+  | { kind: "watermark"; label: string }
+  | { kind: "reparse"; label: string }
+  | null;
+
+function getNextAction(status: string): NextAction {
+  switch (status) {
+    case "parsed":
+    case "edited":
+      return { kind: "chunk", label: "Chunk Document" };
+    case "chunked":
+      return { kind: "watermark", label: "Watermark Chunks" };
+    case "failed":
+      return { kind: "reparse", label: "Re-parse" };
+    default:
+      return null;
+  }
+}
+
+const pipelineSteps = ["Parse", "Chunk", "Watermark"] as const;
+
+function statusToStep(status: string): number {
+  switch (status) {
+    case "pending":
+    case "parsing":
+      return 0;
+    case "parsed":
+    case "edited":
+    case "failed":
+      return 1;
+    case "chunked":
+      return 2;
+    case "watermarked":
+      return 3;
+    default:
+      return 0;
+  }
+}
+
+function DocPipeline({ status, chunkCount }: { status: string; chunkCount: number }) {
+  const currentStep = statusToStep(status);
+  const isFailed = status === "failed";
+
+  return (
+    <div className="flex items-center gap-1">
+      {pipelineSteps.map((step, i) => {
+        const done = currentStep > i;
+        const active = currentStep === i;
+        const failedHere = isFailed && i === 0;
+
+        let dotClass = "h-2 w-2 rounded-full ";
+        let labelClass = "text-[10px] ";
+
+        if (failedHere) {
+          dotClass += "bg-red-500";
+          labelClass += "text-red-500 font-medium";
+        } else if (done) {
+          dotClass += "bg-emerald-500";
+          labelClass += "text-emerald-600 font-medium";
+        } else if (active) {
+          dotClass += "bg-corpus-500";
+          labelClass += "text-corpus-600 font-medium";
+        } else {
+          dotClass += "bg-gray-300";
+          labelClass += "text-text-muted";
+        }
+
+        return (
+          <div key={step} className="flex items-center gap-1">
+            {i > 0 && (
+              <div
+                className={`mx-0.5 h-px w-4 ${done ? "bg-emerald-400" : "bg-gray-200"}`}
+              />
+            )}
+            <span className={dotClass} />
+            <span className={labelClass}>
+              {step}
+              {step === "Chunk" && chunkCount > 0 ? ` (${chunkCount})` : ""}
+            </span>
+          </div>
+        );
+      })}
+      {statusToStep(status) >= 3 && (
+        <>
+          <div className="mx-0.5 h-px w-4 bg-emerald-400" />
+          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+          <span className="text-[10px] text-emerald-600 font-medium">Done</span>
+        </>
+      )}
+    </div>
+  );
+}
+
+function NextStepButton({
+  action,
+  chunking,
+  watermarking,
+  onChunk,
+  onWatermark,
+  onReparse,
+}: {
+  action: NonNullable<NextAction>;
+  chunking: boolean;
+  watermarking: boolean;
+  onChunk: () => Promise<void>;
+  onWatermark: () => Promise<void>;
+  onReparse: () => Promise<void>;
+}) {
+  const handlers: Record<string, { onClick: () => void; disabled: boolean; loadingLabel: string; color: string }> = {
+    chunk: {
+      onClick: () => { onChunk(); },
+      disabled: chunking,
+      loadingLabel: "Chunking...",
+      color: "bg-purple-600 hover:bg-purple-700",
+    },
+    watermark: {
+      onClick: () => { onWatermark(); },
+      disabled: watermarking,
+      loadingLabel: "Watermarking...",
+      color: "bg-emerald-600 hover:bg-emerald-700",
+    },
+    reparse: {
+      onClick: () => { onReparse(); },
+      disabled: false,
+      loadingLabel: "Re-parsing...",
+      color: "bg-amber-600 hover:bg-amber-700",
+    },
+  };
+
+  const h = handlers[action.kind];
+
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        h.onClick();
+      }}
+      disabled={h.disabled}
+      className={`rounded-md px-4 py-1.5 text-xs font-semibold text-white ${h.color} disabled:opacity-50 transition-colors`}
+    >
+      {h.disabled ? h.loadingLabel : `Next: ${action.label}`}
+    </button>
+  );
+}
+
 // ─── Document Card ───────────────────────────────────────────────────────────
 
 function DocumentCard({
@@ -210,6 +358,9 @@ function DocumentCard({
 
   const isChunkOrWatermark = doc.status === "chunked" || doc.status === "watermarked";
 
+  // Determine the next action for this document
+  const nextAction = getNextAction(doc.status);
+
   return (
     <div className="rounded-lg border border-border bg-surface">
       {/* Header */}
@@ -217,7 +368,7 @@ function DocumentCard({
         className="flex cursor-pointer items-center justify-between p-4"
         onClick={onToggle}
       >
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-text">{title}</p>
           <p className="text-xs text-text-muted">{corpusId}</p>
         </div>
@@ -239,6 +390,21 @@ function DocumentCard({
           </span>
           <span className="text-text-muted">{isActive ? "▲" : "▼"}</span>
         </div>
+      </div>
+
+      {/* Per-document pipeline + next step */}
+      <div className="flex items-center justify-between border-t border-border/50 px-4 py-2">
+        <DocPipeline status={doc.status} chunkCount={doc.chunks?.length ?? 0} />
+        {nextAction && (
+          <NextStepButton
+            action={nextAction}
+            chunking={chunking}
+            watermarking={watermarking}
+            onChunk={onChunk}
+            onWatermark={onWatermark}
+            onReparse={onReparse}
+          />
+        )}
       </div>
 
       {/* Expanded content */}
