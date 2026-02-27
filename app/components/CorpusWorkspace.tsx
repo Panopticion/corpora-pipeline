@@ -59,6 +59,7 @@ interface Props {
       heading_path: string[];
     }> | null;
     sort_order: number;
+    promoted_at: string | null;
   }>;
 }
 
@@ -104,6 +105,7 @@ function mapServerDocs(documents: Props["documents"]): SessionDoc[] {
         }))
       : null,
     sortOrder: d.sort_order,
+    promotedAt: d.promoted_at,
   }));
 }
 

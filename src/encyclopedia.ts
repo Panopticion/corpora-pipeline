@@ -78,17 +78,55 @@ export async function promoteToEncyclopedia(
     source_document_id: documentId,
   };
 
-  // Upsert on (created_by, corpus_id)
-  const { data: upserted, error: upsertError } = await client
+  // Prevent silent overwrite if a different source document already occupies
+  // this (created_by, corpus_id) key.
+  const { data: existing, error: existingError } = await client
     .from("corpus_encyclopedia")
-    .upsert(entry, { onConflict: "created_by,corpus_id" })
-    .select("*")
-    .single();
+    .select("id, source_document_id")
+    .eq("created_by", userId)
+    .eq("corpus_id", corpus.corpus_id)
+    .maybeSingle();
 
-  if (upsertError) {
+  if (existingError) {
     throw new Error(
-      `Failed to promote to Encyclopedia: ${upsertError.message}`,
+      `Failed to check existing Encyclopedia entry: ${existingError.message}`,
     );
+  }
+
+  let saved: unknown;
+  if (existing && existing.source_document_id !== documentId) {
+    throw new Error(
+      `Cannot promote document: corpus_id '${corpus.corpus_id}' is already used by another promoted document. Update corpus_id in the document frontmatter and try again.`,
+    );
+  }
+
+  if (existing) {
+    const { data: updated, error: updateError } = await client
+      .from("corpus_encyclopedia")
+      .update(entry)
+      .eq("id", existing.id)
+      .select("*")
+      .single();
+
+    if (updateError) {
+      throw new Error(
+        `Failed to update Encyclopedia entry: ${updateError.message}`,
+      );
+    }
+    saved = updated;
+  } else {
+    const { data: inserted, error: insertError } = await client
+      .from("corpus_encyclopedia")
+      .insert(entry)
+      .select("*")
+      .single();
+
+    if (insertError) {
+      throw new Error(
+        `Failed to promote to Encyclopedia: ${insertError.message}`,
+      );
+    }
+    saved = inserted;
   }
 
   // Mark session document as promoted
@@ -97,7 +135,7 @@ export async function promoteToEncyclopedia(
     .update({ promoted_at: new Date().toISOString() })
     .eq("id", documentId);
 
-  return upserted as EncyclopediaEntry;
+  return saved as EncyclopediaEntry;
 }
 
 // ─── List ────────────────────────────────────────────────────────────────────

@@ -9,6 +9,17 @@ import { useState, useRef } from "react";
 import { useSessionStore } from "@/lib/stores";
 import { insertDocForParse, reparseDocument } from "@/server/session-actions";
 
+function buildDefaultUploadName(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  return `upload-${y}${m}${day}-${hh}${mm}${ss}.txt`;
+}
+
 export function DocumentUploader() {
   const store = useSessionStore();
   const [sourceText, setSourceText] = useState("");
@@ -23,12 +34,14 @@ export function DocumentUploader() {
     setError(null);
 
     try {
+      const resolvedSourceFileName = fileName.trim() || buildDefaultUploadName();
+
       // Insert document (fast — returns immediately)
       const { documentId, sortOrder } = await insertDocForParse({
         data: {
           sessionId: store.sessionId,
           sourceText,
-          sourceFileName: fileName || undefined,
+          sourceFileName: resolvedSourceFileName,
         },
       });
 
@@ -36,7 +49,7 @@ export function DocumentUploader() {
       store.addDocument({
         id: documentId,
         sessionId: store.sessionId,
-        sourceFilename: fileName || "upload.txt",
+        sourceFilename: resolvedSourceFileName,
         sourceHash: "",
         parsedMarkdown: null,
         parseModel: null,
@@ -47,6 +60,7 @@ export function DocumentUploader() {
         errorMessage: null,
         chunks: null,
         sortOrder,
+        promotedAt: null,
       });
 
       // Switch to Documents tab so user sees the parsing card

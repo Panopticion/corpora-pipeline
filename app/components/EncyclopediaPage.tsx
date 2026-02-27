@@ -471,7 +471,7 @@ export function EncyclopediaPage({
               className="w-full rounded-md border border-border bg-surface px-3 py-2 font-mono text-xs leading-relaxed text-text outline-none focus:border-corpus-500 focus:ring-1 focus:ring-corpus-500"
             />
           ) : (
-            <pre className="max-h-[600px] overflow-auto rounded-md bg-surface-alt p-4 font-mono text-xs leading-relaxed text-text">
+            <pre className="max-h-150 overflow-auto rounded-md bg-surface-alt p-4 font-mono text-xs leading-relaxed text-text">
               {store.crosswalkMarkdown}
             </pre>
           )}

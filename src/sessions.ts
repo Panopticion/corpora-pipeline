@@ -42,6 +42,12 @@ function sha256(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
+function resolveSourceFilename(sourceFileName: string | undefined, sourceHash: string): string {
+  const trimmed = sourceFileName?.trim();
+  if (trimmed) return trimmed;
+  return `upload-${sourceHash.slice(0, 8)}.txt`;
+}
+
 function extractMarkdown(raw: string): string {
   // Match opening ```markdown fence and extract everything up to the LAST ``` fence.
   // Greedy ([\s\S]*) ensures we don't stop at embedded code blocks in the body.
@@ -216,6 +222,7 @@ export async function insertDocumentForParse(
 ): Promise<{ documentId: string; sourceHash: string; sortOrder: number }> {
   const model = options.model ?? PARSE_MODEL_DEFAULT;
   const sourceHash = sha256(sourceText);
+  const sourceFilename = resolveSourceFilename(options.sourceFileName, sourceHash);
 
   const { count } = await client
     .from("corpus_session_documents")
@@ -226,7 +233,7 @@ export async function insertDocumentForParse(
     .from("corpus_session_documents")
     .insert({
       session_id: sessionId,
-      source_filename: options.sourceFileName ?? "upload.txt",
+      source_filename: sourceFilename,
       source_text: sourceText,
       source_hash: sourceHash,
       status: "parsing",
@@ -269,6 +276,7 @@ export async function addAndParseDocument(
 ): Promise<SessionParseResult> {
   const model = options.model ?? PARSE_MODEL_DEFAULT;
   const sourceHash = sha256(sourceText);
+  const sourceFilename = resolveSourceFilename(options.sourceFileName, sourceHash);
 
   // Get current document count for sort order
   const { count } = await client
@@ -281,7 +289,7 @@ export async function addAndParseDocument(
     .from("corpus_session_documents")
     .insert({
       session_id: sessionId,
-      source_filename: options.sourceFileName ?? "upload.txt",
+      source_filename: sourceFilename,
       source_text: sourceText,
       source_hash: sourceHash,
       status: "parsing",

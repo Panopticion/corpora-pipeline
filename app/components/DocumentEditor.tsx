@@ -23,7 +23,6 @@ export function DocumentEditor() {
   const [chunking, setChunking] = useState<string | null>(null);
   const [watermarking, setWatermarking] = useState<string | null>(null);
   const [promoting, setPromoting] = useState<string | null>(null);
-  const [promoted, setPromoted] = useState<Set<string>>(new Set());
 
   if (store.documents.length === 0) {
     return (
@@ -141,12 +140,15 @@ export function DocumentEditor() {
             }
           }}
           promoting={promoting === doc.id}
-          isPromoted={promoted.has(doc.id)}
+          isPromoted={Boolean(doc.promotedAt)}
           onPromote={async () => {
             setPromoting(doc.id);
             try {
               await promoteDoc({ data: { documentId: doc.id } });
-              setPromoted((prev) => new Set(prev).add(doc.id));
+              store.updateDocument(doc.id, {
+                promotedAt: new Date().toISOString(),
+                errorMessage: null,
+              });
             } catch (err) {
               store.updateDocument(doc.id, {
                 errorMessage: `Promote failed: ${err instanceof Error ? err.message : String(err)}`,
