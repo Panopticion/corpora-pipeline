@@ -21,6 +21,7 @@
     "test:cli": "vitest run src/cli.test.ts",
     "test:validator": "vitest run src/validate.test.ts",
     "test:watch": "vitest",
+    "git:health": "bash scripts/git-health-check.sh",
     "prepare": "husky"
   },
   "dependencies": {
