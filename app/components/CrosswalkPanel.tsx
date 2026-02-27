@@ -20,6 +20,7 @@ export function CrosswalkPanel() {
   const [editText, setEditText] = useState(store.crosswalkMarkdown ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Sync editText when crosswalk arrives from polling
   useEffect(() => {
@@ -187,12 +188,14 @@ export function CrosswalkPanel() {
                 </button>
               )}
               <button
-                onClick={() =>
-                  navigator.clipboard.writeText(store.crosswalkMarkdown ?? "")
-                }
+                onClick={() => {
+                  navigator.clipboard.writeText(store.crosswalkMarkdown ?? "");
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
                 className="rounded-md border border-border px-4 py-1.5 text-xs text-text-muted hover:bg-surface-alt"
               >
-                Copy
+                {copied ? "Copied!" : "Copy"}
               </button>
             </div>
           </div>

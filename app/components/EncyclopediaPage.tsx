@@ -2,7 +2,7 @@
  * Encyclopedia — persistent document library page.
  *
  * Displays all promoted documents. Users can select entries for
- * crosswalk generation, view details, or remove entries.
+ * crosswalk generation, view details, download as ZIP, or remove entries.
  */
 
 import { useState, useEffect } from "react";
@@ -15,6 +15,7 @@ import {
   removeEncyclopediaEntry,
   generateEncyclopediaCrosswalk,
 } from "@/server/session-actions";
+import { zipSync, strToU8 } from "fflate";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -52,6 +53,43 @@ const tierColors: Record<string, string> = {
   tier_2: "bg-amber-100 text-amber-700",
   tier_3: "bg-blue-100 text-blue-700",
 };
+
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+// ─── Copy Button ─────────────────────────────────────────────────────────────
+
+function CopyButton({
+  text,
+  label,
+  className,
+}: {
+  text: string;
+  label?: string;
+  className?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }}
+      className={
+        className ??
+        "rounded-md border border-border px-4 py-1.5 text-xs text-text-muted hover:bg-surface-alt"
+      }
+    >
+      {copied ? "Copied!" : label ?? "Copy"}
+    </button>
+  );
+}
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
@@ -110,15 +148,67 @@ export function EncyclopediaPage({
     }
   }
 
+  function handleDownloadZip() {
+    const files: Record<string, Uint8Array> = {};
+
+    // Add all encyclopedia documents
+    store.entries.forEach((entry, i) => {
+      const idx = String(i + 1).padStart(2, "0");
+      files[`documents/${idx}-${entry.corpusId}.md`] = strToU8(entry.markdown);
+    });
+
+    // Add watermarked chunks
+    store.entries.forEach((entry) => {
+      if (entry.chunks) {
+        entry.chunks.forEach((chunk) => {
+          const seq = String(chunk.sequence).padStart(3, "0");
+          const chunkSlug = slugify(chunk.sectionTitle).slice(0, 40);
+          files[`chunks/${entry.corpusId}/${seq}-${chunkSlug}.md`] = strToU8(
+            chunk.content,
+          );
+        });
+      }
+    });
+
+    // Add crosswalk
+    if (store.crosswalkMarkdown) {
+      files["crosswalk/crosswalk-v1.md"] = strToU8(store.crosswalkMarkdown);
+    }
+
+    // Add README
+    files["README.md"] = strToU8(buildReadme(store.entries, !!store.crosswalkMarkdown));
+
+    const zipped = zipSync(files);
+    const blob = new Blob([zipped.buffer as ArrayBuffer], {
+      type: "application/zip",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `encyclopedia-bundle-${new Date().toISOString().split("T")[0]}.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-lg font-semibold text-text">Encyclopedia</h1>
-        <p className="text-xs text-text-muted">
-          Your persistent library of fully processed compliance documents.
-          Select two or more entries to generate a cross-framework crosswalk.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-semibold text-text">Encyclopedia</h1>
+          <p className="text-xs text-text-muted">
+            Your persistent library of fully processed compliance documents.
+            Select two or more entries to generate a cross-framework crosswalk.
+          </p>
+        </div>
+        {store.entries.length > 0 && (
+          <button
+            onClick={handleDownloadZip}
+            className="rounded-md bg-corpus-600 px-4 py-2 text-sm font-medium text-white hover:bg-corpus-700"
+          >
+            Download ZIP
+          </button>
+        )}
       </div>
 
       {error && (
@@ -269,7 +359,7 @@ export function EncyclopediaPage({
                 {/* Expanded detail */}
                 {isExpanded && (
                   <div className="border-t border-border p-4">
-                    <div className="mb-3 flex flex-wrap gap-4 text-xs text-text-muted">
+                    <div className="mb-3 flex flex-wrap items-center gap-4 text-xs text-text-muted">
                       <span>File: {entry.sourceFilename}</span>
                       <span>
                         Added:{" "}
@@ -282,6 +372,16 @@ export function EncyclopediaPage({
                       )}
                       {entry.segments.length > 0 && (
                         <span>Segments: {entry.segments.join(", ")}</span>
+                      )}
+                      <CopyButton
+                        text={entry.markdown}
+                        label="Copy Document"
+                      />
+                      {entry.chunks && (
+                        <CopyButton
+                          text={entry.chunks.map((c) => c.content).join("\n\n")}
+                          label={`Copy Chunks (${entry.chunks.length})`}
+                        />
                       )}
                     </div>
                     <pre className="max-h-96 overflow-auto rounded-md bg-surface-alt p-3 font-mono text-xs leading-relaxed text-text">
@@ -335,16 +435,7 @@ export function EncyclopediaPage({
                   Edit
                 </button>
               )}
-              <button
-                onClick={() =>
-                  navigator.clipboard.writeText(
-                    store.crosswalkMarkdown ?? "",
-                  )
-                }
-                className="rounded-md border border-border px-4 py-1.5 text-xs text-text-muted hover:bg-surface-alt"
-              >
-                Copy
-              </button>
+              <CopyButton text={store.crosswalkMarkdown ?? ""} />
             </div>
           </div>
 
@@ -365,4 +456,69 @@ export function EncyclopediaPage({
       )}
     </div>
   );
+}
+
+// ─── README generator ────────────────────────────────────────────────────────
+
+function buildReadme(entries: EncyclopediaDoc[], hasCrosswalk: boolean): string {
+  const lines = [
+    "# Encyclopedia Bundle",
+    "",
+    `Generated by Panopticon Corpus Pipeline on ${new Date().toISOString().split("T")[0]}`,
+    "",
+    "## Documents",
+    "",
+    ...entries.map(
+      (e, i) =>
+        `${String(i + 1)}. \`${e.corpusId}\` — ${e.title} (${e.tier.replace("_", " ")})`,
+    ),
+    "",
+  ];
+
+  const withChunks = entries.filter((e) => e.chunks && e.chunks.length > 0);
+  if (withChunks.length > 0) {
+    lines.push(
+      "## Chunks",
+      "",
+      "| Document | Chunks |",
+      "|----------|--------|",
+      ...withChunks.map(
+        (e) => `| ${e.corpusId} | ${e.chunks?.length ?? 0} |`,
+      ),
+      "",
+      "### Watermark Verification",
+      "",
+      "Each chunk contains an HTML comment watermark at the end:",
+      "",
+      "```",
+      "<!-- corpus-watermark:v1:{corpusId}:{sequence}:{signature} -->",
+      "```",
+      "",
+    );
+  }
+
+  if (hasCrosswalk) {
+    lines.push(
+      "## Crosswalk",
+      "",
+      "A cross-framework mapping is included in `crosswalk/crosswalk-v1.md`.",
+      "",
+    );
+  }
+
+  lines.push(
+    "## Usage",
+    "",
+    "These corpus Markdown files are formatted for the Panopticon vector embedding pipeline.",
+    "Each file contains YAML frontmatter with S.I.R.E. metadata for identity-first retrieval.",
+    "",
+    "Ingest via CLI:",
+    "",
+    "```bash",
+    "npx @panopticon/corpus-pipeline --action ingest_and_embed",
+    "```",
+    "",
+  );
+
+  return lines.join("\n");
 }
