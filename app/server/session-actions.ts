@@ -28,6 +28,7 @@ import {
   updateSessionName as updateSessionNameFn,
   deleteSession as deleteSessionFn,
   setSessionPublic as setSessionPublicFn,
+  recordSessionQualitySnapshot as recordSessionQualitySnapshotFn,
 } from "@pipeline/sessions";
 import {
   reparseDocument as reparseDocumentFn,
@@ -247,6 +248,46 @@ export const saveCrosswalkEdit = createServerFn({ method: "POST" })
     await requireUser();
     const service = getSupabaseService();
     await saveCrosswalkEditFn(service, data.sessionId, data.markdown);
+  });
+
+export const recordSessionQualitySnapshot = createServerFn({ method: "POST" })
+  .inputValidator(
+    (data: {
+      sessionId: string;
+      metrics: {
+        quality: {
+          parseAccuracy: number;
+          chunkCoverage: number;
+          watermarkIntegrity: number;
+          promotionReadiness: number;
+          overall: number;
+        };
+        gatePass: {
+          parse: boolean;
+          chunk: boolean;
+          watermark: boolean;
+          promote: boolean;
+        };
+        counts: {
+          totalDocs: number;
+          promotedWatermarkedDocs: number;
+        };
+        canGenerateCrosswalk: boolean;
+        sessionStatus: "uploading" | "complete" | "crosswalk_pending" | "crosswalk_done" | "archived";
+        crosswalkPresent: boolean;
+      };
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const user = await requireUser();
+    const service = getSupabaseService();
+
+    const session = await getSessionFn(service, data.sessionId);
+    if (session.created_by !== user.id) {
+      throw new Error("Not authorized");
+    }
+
+    return await recordSessionQualitySnapshotFn(service, data.sessionId, data.metrics, user.id);
   });
 
 // ─── Public sharing ──────────────────────────────────────────────────────

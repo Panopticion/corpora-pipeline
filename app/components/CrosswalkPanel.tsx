@@ -7,6 +7,7 @@
 
 import { useState, useEffect } from "react";
 import { useSessionStore } from "@/lib/stores";
+import { computeWorkflowReadiness } from "@/lib/workflow-readiness";
 import {
   generateCrosswalk,
   saveCrosswalkEdit,
@@ -29,14 +30,8 @@ export function CrosswalkPanel() {
     }
   }, [store.crosswalkMarkdown, editing]);
 
-  const readyDocs = store.documents.filter(
-    (d) =>
-      d.status === "parsed" ||
-      d.status === "edited" ||
-      d.status === "chunked" ||
-      d.status === "watermarked",
-  );
-  const canGenerate = readyDocs.length >= 2;
+  const { gates, promotedWatermarkedDocs, blockers, canGenerateCrosswalk, quality } = computeWorkflowReadiness(store.documents);
+  const canGenerate = canGenerateCrosswalk;
   const isPending = store.sessionStatus === "crosswalk_pending";
 
   async function handleMarkComplete() {
@@ -101,23 +96,46 @@ export function CrosswalkPanel() {
 
         <div className="mb-4 space-y-2">
           <div className="flex items-center gap-4">
+            <span className="rounded-full bg-corpus-100 px-2 py-0.5 text-xs font-medium text-corpus-700">
+              Quality {quality.overall}%
+            </span>
             <span className="text-xs text-text-muted">
-              {readyDocs.length} of {store.documents.length} document{store.documents.length !== 1 ? "s" : ""} ready
+              {promotedWatermarkedDocs.length} of {store.documents.length} document{store.documents.length !== 1 ? "s" : ""} promoted + watermarked
             </span>
             {!canGenerate && (
               <span className="text-xs text-warning">
-                Need at least 2 parsed documents
+                Workflow gates not satisfied
               </span>
             )}
           </div>
-          {readyDocs.length > 0 && (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {gates.map((gate) => (
+              <div
+                key={gate.id}
+                className={`rounded-md border px-2 py-1.5 text-xs ${gate.pass ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}
+              >
+                <div className="font-medium">{gate.pass ? "✓" : "•"} {gate.label}</div>
+                <div className="opacity-80">{gate.detail}</div>
+              </div>
+            ))}
+          </div>
+          {blockers.length > 0 && (
+            <div className="rounded-md border border-warning/20 bg-warning/5 p-2">
+              <ul className="list-disc space-y-0.5 pl-4 text-xs text-warning">
+                {blockers.map((blocker) => (
+                  <li key={blocker}>{blocker}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {promotedWatermarkedDocs.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {readyDocs.map((d) => (
+              {promotedWatermarkedDocs.map((d) => (
                 <span
                   key={d.id}
                   className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700"
                 >
-                  {d.sourceFilename} ({d.status})
+                  {d.sourceFilename} (promoted)
                 </span>
               ))}
             </div>

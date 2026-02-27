@@ -13,6 +13,7 @@ import type {
   CreateSessionOptions,
   CrosswalkResult,
   GenerateCrosswalkOptions,
+  SessionQualitySnapshotPayload,
   SessionDocument,
   SessionParseOptions,
   SessionParseResult,
@@ -670,6 +671,60 @@ export async function archiveSession(
   }
 }
 
+// ─── Quality Snapshots ───────────────────────────────────────────────────────
+
+export async function recordSessionQualitySnapshot(
+  client: SupabaseClient,
+  sessionId: string,
+  metrics: SessionQualitySnapshotPayload,
+  userId?: string,
+): Promise<{ inserted: boolean }> {
+  const { data: session, error: sessionErr } = await client
+    .from("corpus_parse_sessions")
+    .select("id, organization_id, created_by")
+    .eq("id", sessionId)
+    .single();
+
+  if (sessionErr || !session) {
+    throw new Error(`Session not found: ${sessionId}`);
+  }
+
+  const metricsJson = JSON.stringify(metrics);
+  const metricsHash = sha256(metricsJson);
+
+  const { data: latest, error: latestErr } = await client
+    .from("corpus_session_quality_snapshots")
+    .select("metrics_hash")
+    .eq("session_id", sessionId)
+    .order("captured_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (latestErr) {
+    throw new Error(`Failed to read latest quality snapshot: ${latestErr.message}`);
+  }
+
+  if (latest?.metrics_hash === metricsHash) {
+    return { inserted: false };
+  }
+
+  const { error: insertErr } = await client
+    .from("corpus_session_quality_snapshots")
+    .insert({
+      session_id: sessionId,
+      organization_id: (session.organization_id as string | null) ?? null,
+      created_by: userId ?? (session.created_by as string | null) ?? null,
+      metrics_json: metrics,
+      metrics_hash: metricsHash,
+    });
+
+  if (insertErr) {
+    throw new Error(`Failed to insert quality snapshot: ${insertErr.message}`);
+  }
+
+  return { inserted: true };
+}
+
 // ─── Crosswalk Generation ───────────────────────────────────────────────────
 
 /**
@@ -695,27 +750,30 @@ export async function generateCrosswalk(
 
   // Fetch all documents
   const docs = await getSessionDocuments(client, sessionId);
-  const readyDocs = docs.filter(
-    (d) =>
-      d.status === "parsed" ||
-      d.status === "edited" ||
-      d.status === "chunked" ||
-      d.status === "watermarked",
+
+  // Crosswalk is an expensive operation. Require quality gates:
+  // 1) document must be watermarked
+  // 2) document must be promoted to Encyclopedia
+  const promotedWatermarkedDocs = docs.filter(
+    (d) => d.status === "watermarked" && Boolean(d.promoted_at),
   );
 
-  if (readyDocs.length < 2) {
+  if (promotedWatermarkedDocs.length < 2) {
     await client
       .from("corpus_parse_sessions")
       .update({ status: "complete" })
       .eq("id", sessionId);
 
+    const watermarkedCount = docs.filter((d) => d.status === "watermarked").length;
+    const promotedCount = docs.filter((d) => Boolean(d.promoted_at)).length;
+
     throw new Error(
-      "Need at least 2 parsed documents to generate a crosswalk",
+      `Need at least 2 promoted + watermarked documents to generate a crosswalk (watermarked=${String(watermarkedCount)}, promoted=${String(promotedCount)}, promoted_and_watermarked=${String(promotedWatermarkedDocs.length)}).`,
     );
   }
 
-  // Build crosswalk inputs from parsed documents
-  const crosswalkInputs: CrosswalkDocumentInput[] = readyDocs.map((doc) => {
+  // Build crosswalk inputs from promoted + watermarked documents only
+  const crosswalkInputs: CrosswalkDocumentInput[] = promotedWatermarkedDocs.map((doc) => {
     const markdown = doc.user_markdown ?? doc.parsed_markdown ?? "";
 
     // Extract metadata from frontmatter

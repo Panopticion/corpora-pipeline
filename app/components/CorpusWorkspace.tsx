@@ -10,8 +10,10 @@
 import { useEffect, useMemo, useCallback, useState, useRef } from "react";
 import { Link } from "@tanstack/react-router";
 import { useSessionStore, type SessionDoc, type WorkspaceTab } from "@/lib/stores";
+import { computeWorkflowReadiness } from "@/lib/workflow-readiness";
 import {
   getSessionWithDocuments,
+  recordSessionQualitySnapshot,
   renameSession,
   toggleSessionPublic,
 } from "@/server/session-actions";
@@ -434,6 +436,78 @@ export function CorpusWorkspace({ session, documents }: Props) {
   };
 
   const currentStep = getCurrentStep(docs, crosswalkMd);
+  const readiness = computeWorkflowReadiness(docs);
+  const lastSnapshotKeyRef = useRef<string>("");
+
+  const snapshotPayload = useMemo(
+    () => ({
+      quality: readiness.quality,
+      gatePass: {
+        parse: readiness.gates.find((gate) => gate.id === "parse")?.pass ?? false,
+        chunk: readiness.gates.find((gate) => gate.id === "chunk")?.pass ?? false,
+        watermark: readiness.gates.find((gate) => gate.id === "watermark")?.pass ?? false,
+        promote: readiness.gates.find((gate) => gate.id === "promote")?.pass ?? false,
+      },
+      counts: {
+        totalDocs: readiness.totalDocs,
+        promotedWatermarkedDocs: readiness.promotedWatermarkedDocs.length,
+      },
+      canGenerateCrosswalk: readiness.canGenerateCrosswalk,
+      sessionStatus: sessionStatus as "uploading" | "complete" | "crosswalk_pending" | "crosswalk_done" | "archived",
+      crosswalkPresent: Boolean(crosswalkMd),
+    }),
+    [
+      readiness.quality,
+      readiness.gates,
+      readiness.totalDocs,
+      readiness.promotedWatermarkedDocs.length,
+      readiness.canGenerateCrosswalk,
+      sessionStatus,
+      crosswalkMd,
+    ],
+  );
+
+  useEffect(() => {
+    if (!storeReady) return;
+
+    const snapshotKey = JSON.stringify(snapshotPayload);
+    if (snapshotKey === lastSnapshotKeyRef.current) return;
+    lastSnapshotKeyRef.current = snapshotKey;
+
+    void recordSessionQualitySnapshot({
+      data: {
+        sessionId: session.id,
+        metrics: snapshotPayload,
+      },
+    }).catch(() => {
+      // Best-effort: metrics persistence should never block UI interactions.
+    });
+  }, [session.id, snapshotPayload, storeReady]);
+
+  const notParseReadyDocs = docs.filter(
+    (d) =>
+      !(
+        d.status === "parsed" ||
+        d.status === "edited" ||
+        d.status === "chunked" ||
+        d.status === "watermarked"
+      ),
+  );
+  const notChunkedDocs = docs.filter(
+    (d) => !(d.status === "chunked" || d.status === "watermarked"),
+  );
+  const notWatermarkedDocs = docs.filter((d) => d.status !== "watermarked");
+  const notPromotedDocs = docs.filter(
+    (d) => d.status === "watermarked" && !d.promotedAt,
+  );
+
+  function openDocumentsFor(docId: string | null) {
+    if (!storeReady) return;
+    store.setTab("documents");
+    if (docId) {
+      store.setActiveDocument(docId);
+    }
+  }
 
   const tabs: { key: WorkspaceTab; label: string; badge?: number }[] = [
     { key: "upload", label: "Upload" },
@@ -485,6 +559,99 @@ export function CorpusWorkspace({ session, documents }: Props) {
 
       {/* Pipeline progress */}
       <PipelineSteps currentStep={currentStep} />
+
+      {/* Workflow readiness */}
+      <div className="mb-4 rounded-lg border border-border bg-surface p-3">
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-xs font-semibold text-text">Workflow Readiness</p>
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-corpus-100 px-2 py-0.5 text-[11px] font-medium text-corpus-700">
+              Quality {readiness.quality.overall}%
+            </span>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${readiness.canGenerateCrosswalk ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}
+            >
+              {readiness.canGenerateCrosswalk ? "Crosswalk ready" : "Blocked"}
+            </span>
+          </div>
+        </div>
+        <div className="mb-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-md border border-border/60 bg-surface-alt px-2 py-1 text-xs text-text-muted">
+            Parse accuracy: <span className="font-semibold text-text">{readiness.quality.parseAccuracy}%</span>
+          </div>
+          <div className="rounded-md border border-border/60 bg-surface-alt px-2 py-1 text-xs text-text-muted">
+            Chunk coverage: <span className="font-semibold text-text">{readiness.quality.chunkCoverage}%</span>
+          </div>
+          <div className="rounded-md border border-border/60 bg-surface-alt px-2 py-1 text-xs text-text-muted">
+            Watermark integrity: <span className="font-semibold text-text">{readiness.quality.watermarkIntegrity}%</span>
+          </div>
+          <div className="rounded-md border border-border/60 bg-surface-alt px-2 py-1 text-xs text-text-muted">
+            Promotion readiness: <span className="font-semibold text-text">{readiness.quality.promotionReadiness}%</span>
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {readiness.gates.map((gate) => (
+            <div
+              key={gate.id}
+              className={`rounded-md border px-2 py-1.5 text-xs ${gate.pass ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}
+            >
+              <div className="font-medium">{gate.pass ? "✓" : "•"} {gate.label}</div>
+              <div className="opacity-80">{gate.detail}</div>
+            </div>
+          ))}
+        </div>
+        {readiness.blockers.length > 0 && (
+          <div className="mt-2 rounded-md border border-warning/20 bg-warning/5 p-2">
+            <ul className="list-disc space-y-0.5 pl-4 text-xs text-warning">
+              {readiness.blockers.slice(0, 3).map((blocker) => (
+                <li key={blocker}>{blocker}</li>
+              ))}
+            </ul>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {notParseReadyDocs.length > 0 && (
+                <button
+                  onClick={() => openDocumentsFor(notParseReadyDocs[0]?.id ?? null)}
+                  className="rounded-md border border-warning/30 bg-white px-2 py-1 text-xs text-warning hover:bg-warning/10"
+                >
+                  Resolve parse blockers ({notParseReadyDocs.length})
+                </button>
+              )}
+              {notChunkedDocs.length > 0 && (
+                <button
+                  onClick={() => openDocumentsFor(notChunkedDocs[0]?.id ?? null)}
+                  className="rounded-md border border-warning/30 bg-white px-2 py-1 text-xs text-warning hover:bg-warning/10"
+                >
+                  Resolve chunk blockers ({notChunkedDocs.length})
+                </button>
+              )}
+              {notWatermarkedDocs.length > 0 && (
+                <button
+                  onClick={() => openDocumentsFor(notWatermarkedDocs[0]?.id ?? null)}
+                  className="rounded-md border border-warning/30 bg-white px-2 py-1 text-xs text-warning hover:bg-warning/10"
+                >
+                  Resolve watermark blockers ({notWatermarkedDocs.length})
+                </button>
+              )}
+              {notPromotedDocs.length > 0 && (
+                <button
+                  onClick={() => openDocumentsFor(notPromotedDocs[0]?.id ?? null)}
+                  className="rounded-md border border-warning/30 bg-white px-2 py-1 text-xs text-warning hover:bg-warning/10"
+                >
+                  Resolve promotion blockers ({notPromotedDocs.length})
+                </button>
+              )}
+              {readiness.canGenerateCrosswalk && (
+                <button
+                  onClick={() => handleSetTab("crosswalk")}
+                  className="rounded-md border border-emerald-300 bg-white px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-50"
+                >
+                  Go to Crosswalk
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Tabs */}
       <div className="mb-2 flex gap-1 border-b border-border">

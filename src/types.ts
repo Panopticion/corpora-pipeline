@@ -333,6 +333,31 @@ export interface SessionDocument {
   promoted_at: string | null;
 }
 
+export interface SessionQualityMetrics {
+  parseAccuracy: number;
+  chunkCoverage: number;
+  watermarkIntegrity: number;
+  promotionReadiness: number;
+  overall: number;
+}
+
+export interface SessionQualitySnapshotPayload {
+  quality: SessionQualityMetrics;
+  gatePass: {
+    parse: boolean;
+    chunk: boolean;
+    watermark: boolean;
+    promote: boolean;
+  };
+  counts: {
+    totalDocs: number;
+    promotedWatermarkedDocs: number;
+  };
+  canGenerateCrosswalk: boolean;
+  sessionStatus: SessionStatus;
+  crosswalkPresent: boolean;
+}
+
 /** Options for creating a new parse session. */
 export interface CreateSessionOptions {
   name?: string;
