@@ -600,7 +600,7 @@ function ChunkReview({
       </div>
 
       {/* Action buttons */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         {!isWatermarked && (
           <button
             onClick={onWatermark}
@@ -610,17 +610,18 @@ function ChunkReview({
             {watermarking ? "Watermarking..." : "Watermark Chunks"}
           </button>
         )}
+        {isWatermarked && (
+          <>
+            <CopyDocButton doc={doc} />
+            <CopyChunksButton chunks={chunks} />
+          </>
+        )}
         <button
           onClick={onBackToEdit}
           className="rounded-md border border-border px-4 py-2 text-sm text-text-muted hover:bg-surface-alt"
         >
           Back to Edit
         </button>
-        {isWatermarked && (
-          <span className="text-xs text-emerald-600 font-medium">
-            Ready for download
-          </span>
-        )}
       </div>
 
       {/* Chunk list */}
@@ -682,6 +683,9 @@ function ChunkCard({
 
       {expanded && (
         <div className="border-t border-border px-3 py-2">
+          <div className="mb-2 flex justify-end">
+            <CopyChunkButton content={chunk.content} />
+          </div>
           <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-text">
             {chunk.content}
           </pre>
@@ -693,6 +697,62 @@ function ChunkCard({
         </div>
       )}
     </div>
+  );
+}
+
+// ─── Copy Buttons ────────────────────────────────────────────────────────────
+
+function CopyDocButton({ doc }: { doc: SessionDoc }) {
+  const [copied, setCopied] = useState(false);
+  const markdown = doc.userMarkdown ?? doc.parsedMarkdown ?? "";
+
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(markdown);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }}
+      className="rounded-md bg-corpus-600 px-4 py-2 text-sm font-medium text-white hover:bg-corpus-700"
+    >
+      {copied ? "Copied!" : "Copy Document"}
+    </button>
+  );
+}
+
+function CopyChunkButton({ content }: { content: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(content);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+      className="rounded border border-border px-2 py-0.5 text-[10px] text-text-muted hover:bg-surface"
+    >
+      {copied ? "Copied!" : "Copy"}
+    </button>
+  );
+}
+
+function CopyChunksButton({ chunks }: { chunks: ChunkData[] }) {
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <button
+      onClick={() => {
+        const text = chunks
+          .map((c) => c.content)
+          .join("\n\n---\n\n");
+        navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }}
+      className="rounded-md border border-corpus-600 px-4 py-2 text-sm font-medium text-corpus-600 hover:bg-corpus-50"
+    >
+      {copied ? "Copied!" : `Copy All Chunks (${chunks.length})`}
+    </button>
   );
 }
 
