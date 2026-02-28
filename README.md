@@ -194,6 +194,14 @@ Optional:
 - `KEEP_HARNESS_ARTIFACTS=true` (or `pnpm harness:parse-watermark:keep`) to retain session/doc
   artifacts for debugging.
 
+### Golden Path Demo (one command)
+
+Run the canonical end-to-end demo path (session create → parse → chunk → watermark → verification):
+
+```bash
+pnpm demo:golden-path
+```
+
 ## Supabase Type Generation
 
 Generate strongly typed DB definitions into [app/lib/supabase.types.ts](app/lib/supabase.types.ts):
