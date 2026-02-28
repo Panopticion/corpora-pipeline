@@ -8,6 +8,11 @@ Panopticon ships a TypeScript library, CLI, MCP server, and hosted web UI for co
 corpus ingestion. Upload compliance documents, AI-parse into structured corpus Markdown with S.I.R.E.
 identity metadata, generate cross-framework crosswalks, and download attributed vector-ready bundles.
 
+## Repository map
+
+- [Panopticion/corpus-pipeline-cli](https://github.com/Panopticion/corpus-pipeline-cli): Public CLI/runtime, worker, MCP server, and sample corpora
+- [Panopticion/corpus-web](https://github.com/Panopticion/corpus-web): Web app for session workflow, dashboard operations, and bundle export
+
 ## Docs
 
 - [Quickstart](https://panopticonlabs.ai/quickstart): Get from zero to first embedded chunk in ~10 minutes
@@ -20,6 +25,12 @@ identity metadata, generate cross-framework crosswalks, and download attributed 
 - [Product Roadmap](https://panopticonlabs.ai/roadmap): Contributor roadmap with phased delivery and good-first tasks
 - [Privacy Policy](https://panopticonlabs.ai/privacy): How Panopticon AI documentation and software handle privacy and telemetry
 - [Terms of Service](https://panopticonlabs.ai/terms): Legal terms for the Panopticon AI docs site and open-source software
+
+## Site metadata
+
+- Favicon: https://panopticonlabs.ai/favicon.svg
+- Sitemap: https://panopticonlabs.ai/sitemap.xml
+- Robots: https://panopticonlabs.ai/robots.txt
 
 ## Web UI
 

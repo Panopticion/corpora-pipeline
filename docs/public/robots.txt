@@ -4,6 +4,9 @@ Disallow: /assets/
 
 Sitemap: https://panopticonlabs.ai/sitemap.xml
 
+# LLM docs discovery
+llms: https://panopticonlabs.ai/llms.txt
+
 # LLM-specific crawlers
 User-agent: GPTBot
 Allow: /

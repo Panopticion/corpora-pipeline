@@ -22,11 +22,11 @@ export default defineConfig({
     // ── Favicons ───────────────────────────────────────────────
     [
       "link",
-      { rel: "icon", type: "image/svg+xml", href: "/eye-icon.svg" },
+      { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
     ],
     [
       "link",
-      { rel: "apple-touch-icon", sizes: "180x180", href: "/eye-icon.svg" },
+      { rel: "apple-touch-icon", sizes: "180x180", href: "/favicon.svg" },
     ],
 
     // ── Canonical ──────────────────────────────────────────────
@@ -88,7 +88,7 @@ export default defineConfig({
           priceCurrency: "USD",
         },
         license: "https://opensource.org/licenses/MIT",
-        codeRepository: "https://github.com/Panopticion/corpora-pipeline",
+        codeRepository: "https://github.com/Panopticion/corpus-pipeline-cli",
         programmingLanguage: ["TypeScript", "SQL"],
         runtimePlatform: "Node.js",
         softwareRequirements: "Postgres 17, pgvector, PostgREST",
@@ -150,14 +150,14 @@ export default defineConfig({
       { text: "Roadmap", link: "/roadmap" },
       {
         text: "GitHub",
-        link: "https://github.com/Panopticion/corpora-pipeline",
+        link: "https://github.com/Panopticion/corpus-pipeline-cli",
       },
     ],
 
     socialLinks: [
       {
         icon: "github",
-        link: "https://github.com/Panopticion/corpora-pipeline",
+        link: "https://github.com/Panopticion/corpus-pipeline-cli",
       },
     ],
 
@@ -193,7 +193,7 @@ export default defineConfig({
 
     footer: {
       message:
-        'Released under the <a href="https://github.com/Panopticion/corpora-pipeline/blob/main/LICENSE">MIT License</a>. Semantic search finds the text — S.I.R.E. enforces the boundary.<br><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="mailto:support@panopticonlabs.ai">support@panopticonlabs.ai</a>',
+        'Released under the <a href="https://github.com/Panopticion/corpus-pipeline-cli/blob/main/LICENSE">MIT License</a>. Semantic search finds the text — S.I.R.E. enforces the boundary.<br><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="mailto:support@panopticonlabs.ai">support@panopticonlabs.ai</a>',
       copyright: "© 2026 Panopticon AI",
     },
 

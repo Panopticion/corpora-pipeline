@@ -40,7 +40,7 @@ hero:
       link: /guide
     - theme: alt
       text: GitHub
-      link: https://github.com/Panopticion/corpora-pipeline
+      link: https://github.com/Panopticion/corpus-pipeline-cli
 
 features:
   - icon: 🛡️
@@ -328,8 +328,8 @@ project.
 No database. No API keys. No Docker.
 
 ```bash
-git clone https://github.com/Panopticion/corpora-pipeline.git
-cd corpora-pipeline
+git clone https://github.com/Panopticion/corpus-pipeline-cli.git
+cd corpus-pipeline-cli
 npm install
 
 npx tsx src/cli.ts --action validate
