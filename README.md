@@ -184,6 +184,10 @@ pnpm harness:parse-watermark
 
 Required env vars: `VITE_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENROUTER_API_KEY`.
 
+Troubleshooting: if an env value was copied with escaped control characters (for example, ending in
+`\\n` or `\\r`), the harness may fail with null responses despite no explicit auth error. Re-enter
+the value without escaped suffixes or trailing whitespace.
+
 Optional:
 
 - `HARNESS_SOURCE_FILE=path/to/input.txt` to override default source text.
