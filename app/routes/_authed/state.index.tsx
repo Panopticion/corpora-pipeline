@@ -55,7 +55,7 @@ export const Route = createFileRoute("/_authed/state/")({
   loaderDeps: ({ search }) => search,
   loader: ({ deps }) => getGlobalDocumentState({ data: deps }),
   head: () => ({
-    meta: [{ title: "Global State — Panopticon AI" }],
+    meta: [{ title: "Dashboard — Panopticon AI" }],
     scripts: [
       {
         type: "application/ld+json",
@@ -72,7 +72,7 @@ export const Route = createFileRoute("/_authed/state/")({
             {
               "@type": "ListItem",
               position: 2,
-              name: "Global State",
+              name: "Dashboard",
             },
           ],
         }),

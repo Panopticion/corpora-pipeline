@@ -827,7 +827,7 @@ export function GlobalStateDashboard({
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-text">Global State</h1>
+          <h1 className="text-lg font-semibold text-text">Dashboard</h1>
           <p className="text-xs text-text-muted">
             Unified operational view across all sessions and documents.
           </p>

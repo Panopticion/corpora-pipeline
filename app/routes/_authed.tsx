@@ -47,7 +47,7 @@ function Breadcrumbs() {
   } else if (path.startsWith("/encyclopedia")) {
     crumbs.push({ label: "Encyclopedia" });
   } else if (path.startsWith("/state")) {
-    crumbs.push({ label: "Global State" });
+    crumbs.push({ label: "Dashboard" });
   }
 
   if (crumbs.length <= 1) return null;
@@ -84,9 +84,9 @@ function AuthedLayout() {
   const { user } = Route.useRouteContext();
 
   const navItems = [
+    { to: "/state", label: "Dashboard" },
     { to: "/sessions", label: "Sessions" },
     { to: "/encyclopedia", label: "Encyclopedia" },
-    { to: "/state", label: "Global State" },
   ] as const;
 
   async function handleSignOut() {
