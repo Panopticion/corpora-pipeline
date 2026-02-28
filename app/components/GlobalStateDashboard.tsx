@@ -1146,9 +1146,9 @@ export function GlobalStateDashboard({
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-lg border border-border bg-surface">
+          <div className="max-h-[62vh] overflow-auto rounded-lg border border-border bg-surface">
             <table className="min-w-full divide-y divide-border text-sm">
-              <thead className="bg-surface-alt">
+              <thead className="sticky top-0 z-10 bg-surface-alt">
                 <tr className="text-left text-xs font-semibold uppercase tracking-wide text-text-muted">
                   <th className="px-4 py-3">
                     <input
@@ -1273,11 +1273,11 @@ export function GlobalStateDashboard({
 
                       {visibleColumns.action && (
                         <td className="px-4 py-3">
-                          <div className="flex flex-col gap-2">
+                          <div className="flex flex-wrap items-center gap-1.5">
                             <Link
                               to="/sessions/$id"
                               params={{ id: row.sessionId }}
-                              className="inline-flex rounded-md border border-border px-2.5 py-1 text-xs font-medium text-text hover:bg-surface-alt"
+                              className="inline-flex whitespace-nowrap rounded-md border border-border px-2.5 py-1 text-xs font-medium text-text hover:bg-surface-alt"
                             >
                               Open session
                             </Link>
@@ -1287,7 +1287,7 @@ export function GlobalStateDashboard({
                                   void runRowAction(row);
                                 }}
                                 disabled={!operatorMode || isBusy || bulkAction !== null}
-                                className="inline-flex rounded-md bg-corpus-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-corpus-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                className="inline-flex whitespace-nowrap rounded-md bg-corpus-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-corpus-700 disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 {actionLabel(rowAction, isBusy)}
                               </button>
