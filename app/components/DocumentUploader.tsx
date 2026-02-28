@@ -8,11 +8,7 @@
 
 import { useState, useRef } from "react";
 import { useSessionStore } from "@/lib/stores";
-import {
-  extractUploadText,
-  insertDocForParse,
-  reparseDocument,
-} from "@/server/session-actions";
+import { useSessionWorkflowOps } from "@/lib/use-session-workflow-ops";
 
 const TEXT_EXTENSIONS = new Set(["txt", "md", "markdown", "json", "yaml", "yml"]);
 const EXTRACT_EXTENSIONS = new Set(["pdf", "docx"]);
@@ -54,6 +50,7 @@ function buildDefaultUploadName(): string {
 
 export function DocumentUploader() {
   const store = useSessionStore();
+  const { extractUploadText, insertDocForParse, reparseDocument } = useSessionWorkflowOps();
   const [sourceText, setSourceText] = useState("");
   const [fileName, setFileName] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -72,11 +69,9 @@ export function DocumentUploader() {
 
       // Insert document (fast — returns immediately)
       const { documentId, sortOrder, isDuplicate } = await insertDocForParse({
-        data: {
-          sessionId: store.sessionId,
-          sourceText,
-          sourceFileName: resolvedSourceFileName,
-        },
+        sessionId: store.sessionId,
+        sourceText,
+        sourceFileName: resolvedSourceFileName,
       });
 
       if (!isDuplicate) {
@@ -110,12 +105,10 @@ export function DocumentUploader() {
       if (!isDuplicate) {
         // Fire off parse — polling picks up result when done
         reparseDocument({
-          data: {
-            documentId,
-            parsePromptProfile: isPublishedStandard
-              ? "published_standard"
-              : "interpretation",
-          },
+          documentId,
+          parsePromptProfile: isPublishedStandard
+            ? "published_standard"
+            : "interpretation",
         }).catch(() => {
           store.updateDocument(documentId, {
             status: "failed",
@@ -158,10 +151,8 @@ export function DocumentUploader() {
         try {
           const fileBase64 = await fileToBase64(file);
           const { text } = await extractUploadText({
-            data: {
-              fileName: file.name,
-              fileBase64,
-            },
+            fileName: file.name,
+            fileBase64,
           });
           setSourceText(text);
         } catch (err) {

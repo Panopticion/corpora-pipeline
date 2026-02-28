@@ -30,6 +30,7 @@ import {
   setSessionPublic as setSessionPublicFn,
   recordSessionQualitySnapshot as recordSessionQualitySnapshotFn,
 } from "@pipeline/sessions";
+import type { CorpusSession, SessionDocument } from "@pipeline/types";
 import {
   reparseDocument as reparseDocumentFn,
   generateCrosswalk as generateCrosswalkFn,
@@ -42,8 +43,40 @@ import {
   removeEncyclopediaEntry as removeEncyclopediaEntryFn,
   generateEncyclopediaCrosswalk as generateEncyclopediaCrosswalkFn,
 } from "@pipeline/encyclopedia";
+import {
+  type GlobalStateActionRequest,
+  type GlobalStateActionResponse,
+  type GlobalStateQuery,
+  type GlobalStateResponse,
+  type ServerErrorEnvelope,
+  type ServerResult,
+} from "@/lib/global-state-types";
+import { loadGlobalDocumentState } from "@/server/global-state-service";
 
 const TEXT_EXTENSIONS = new Set(["txt", "md", "markdown", "json", "yaml", "yml"]);
+
+type DomainErrorCode =
+  | "AUTH_UNAUTHENTICATED"
+  | "AUTH_FORBIDDEN"
+  | "RESOURCE_NOT_FOUND"
+  | "VALIDATION_ERROR"
+  | "DEPENDENCY_ERROR";
+
+class DomainError extends Error {
+  code: DomainErrorCode;
+  status: number;
+
+  constructor(code: DomainErrorCode, message: string, status: number) {
+    super(message);
+    this.name = "DomainError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
+function fail(code: DomainErrorCode, message: string, status: number): never {
+  throw new DomainError(code, message, status);
+}
 
 function getExtension(fileName: string): string {
   const idx = fileName.lastIndexOf(".");
@@ -91,8 +124,43 @@ async function extractTextFromUpload(data: {
 
 function getOpenRouterKey(): string {
   const key = process.env.OPENROUTER_API_KEY;
-  if (!key) throw new Error("Missing OPENROUTER_API_KEY environment variable");
+  if (!key) {
+    fail("DEPENDENCY_ERROR", "Missing OPENROUTER_API_KEY environment variable", 500);
+  }
   return key;
+}
+
+function toErrorEnvelope(error: unknown): ServerErrorEnvelope {
+  if (error instanceof DomainError) {
+    return {
+      code: error.code,
+      message: error.message,
+      status: error.status,
+    };
+  }
+
+  if (error instanceof MissingEnvironmentError) {
+    return {
+      code: "DEPENDENCY_ERROR",
+      message: error.message,
+      status: 500,
+    };
+  }
+
+  return {
+    code: "UNKNOWN_ERROR",
+    message: error instanceof Error ? error.message : "Unexpected server error",
+    status: 500,
+  };
+}
+
+async function asServerResult<T>(run: () => Promise<T>): Promise<ServerResult<T>> {
+  try {
+    const data = await run();
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error: toErrorEnvelope(error) };
+  }
 }
 
 // ─── Auth helper ────────────────────────────────────────────────────────────
@@ -105,10 +173,47 @@ async function requireUser() {
   } = await client.auth.getUser();
 
   if (!user) {
-    throw new Error("Not authenticated");
+    fail("AUTH_UNAUTHENTICATED", "Not authenticated", 401);
   }
 
   return user;
+}
+
+async function requireOwnedSession(
+  service: ReturnType<typeof getSupabaseService>,
+  sessionId: string,
+  userId: string,
+): Promise<CorpusSession> {
+  let session: CorpusSession;
+  try {
+    session = await getSessionFn(service, sessionId);
+  } catch {
+    fail("RESOURCE_NOT_FOUND", "Session not found", 404);
+  }
+  if (session.created_by !== userId) {
+    fail("AUTH_FORBIDDEN", "Not authorized", 403);
+  }
+  return session;
+}
+
+async function requireOwnedDocument(
+  service: ReturnType<typeof getSupabaseService>,
+  documentId: string,
+  userId: string,
+): Promise<SessionDocument> {
+  const { data: document, error } = await service
+    .from("corpus_session_documents")
+    .select("*")
+    .eq("id", documentId)
+    .single();
+
+  if (error || !document) {
+    fail("RESOURCE_NOT_FOUND", "Document not found", 404);
+  }
+
+  await requireOwnedSession(service, document.session_id as string, userId);
+
+  return document as SessionDocument;
 }
 
 // ─── Session CRUD ───────────────────────────────────────────────────────────
@@ -141,28 +246,127 @@ export const getSessions = createServerFn({ method: "GET" }).handler(
 export const getSessionWithDocuments = createServerFn({ method: "GET" })
   .inputValidator((data: { sessionId: string }) => data)
   .handler(async ({ data }) => {
-    await requireUser();
+    const user = await requireUser();
     const service = getSupabaseService();
 
-    const session = await getSessionFn(service, data.sessionId);
+    const session = await requireOwnedSession(service, data.sessionId, user.id);
     const documents = await getSessionDocuments(service, data.sessionId);
 
     return { session, documents };
   });
 
+export const getSessionWithDocumentsResult = createServerFn({ method: "GET" })
+  .inputValidator((data: { sessionId: string }) => data)
+  .handler(async ({ data }) =>
+    asServerResult(async () => {
+      const user = await requireUser();
+      const service = getSupabaseService();
+      const session = await requireOwnedSession(service, data.sessionId, user.id);
+      const documents = await getSessionDocuments(service, data.sessionId);
+      return { session, documents };
+    }),
+  );
+
+export const getGlobalDocumentState = createServerFn({ method: "GET" })
+  .inputValidator((data: GlobalStateQuery | undefined) => data)
+  .handler(async ({ data }) => {
+    const user = await requireUser();
+    const service = getSupabaseService();
+
+    try {
+      return await loadGlobalDocumentState({
+        service,
+        userId: user.id,
+        query: data,
+      });
+    } catch (error) {
+      const envelope = toErrorEnvelope(error);
+      fail(
+        envelope.code === "UNKNOWN_ERROR" ? "DEPENDENCY_ERROR" : envelope.code,
+        envelope.message,
+        envelope.status,
+      );
+    }
+  });
+
+export const getGlobalDocumentStateResult = createServerFn({ method: "GET" })
+  .inputValidator((data: GlobalStateQuery | undefined) => data)
+  .handler(async ({ data }) =>
+    asServerResult<GlobalStateResponse>(async () => {
+      const user = await requireUser();
+      const service = getSupabaseService();
+      return await loadGlobalDocumentState({ service, userId: user.id, query: data });
+    }),
+  );
+
+export const runGlobalStateAction = createServerFn({ method: "POST" })
+  .inputValidator((data: GlobalStateActionRequest) => data)
+  .handler(async ({ data }) =>
+    asServerResult<GlobalStateActionResponse>(async () => {
+      const user = await requireUser();
+      const service = getSupabaseService();
+
+      await requireOwnedDocument(service, data.documentId, user.id);
+
+      if (data.action === "parse") {
+        const result = await reparseDocumentFn(service, data.documentId, {
+          openrouterApiKey: getOpenRouterKey(),
+          parsePromptProfile: data.parsePromptProfile,
+        });
+        return {
+          documentId: data.documentId,
+          action: "parse",
+          status: "started",
+          model: result.model,
+        };
+      }
+
+      if (data.action === "chunk") {
+        const result = await chunkDocumentFn(service, data.documentId);
+        return {
+          documentId: data.documentId,
+          action: "chunk",
+          status: "completed",
+          chunkCount: result.chunkCount,
+        };
+      }
+
+      await watermarkDocumentFn(service, data.documentId);
+      return {
+        documentId: data.documentId,
+        action: "watermark",
+        status: "completed",
+      };
+    }),
+  );
+
 export const renameSession = createServerFn({ method: "POST" })
   .inputValidator((data: { sessionId: string; name: string }) => data)
   .handler(async ({ data }) => {
-    await requireUser();
+    const user = await requireUser();
     const service = getSupabaseService();
+    await requireOwnedSession(service, data.sessionId, user.id);
     await updateSessionNameFn(service, data.sessionId, data.name);
   });
+
+export const renameSessionResult = createServerFn({ method: "POST" })
+  .inputValidator((data: { sessionId: string; name: string }) => data)
+  .handler(async ({ data }) =>
+    asServerResult(async () => {
+      const user = await requireUser();
+      const service = getSupabaseService();
+      await requireOwnedSession(service, data.sessionId, user.id);
+      await updateSessionNameFn(service, data.sessionId, data.name);
+      return { renamed: true };
+    }),
+  );
 
 export const removeSession = createServerFn({ method: "POST" })
   .inputValidator((data: { sessionId: string }) => data)
   .handler(async ({ data }) => {
-    await requireUser();
+    const user = await requireUser();
     const service = getSupabaseService();
+    await requireOwnedSession(service, data.sessionId, user.id);
     await deleteSessionFn(service, data.sessionId);
   });
 
@@ -186,6 +390,8 @@ export const uploadAndParse = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const user = await requireUser();
     const service = getSupabaseService();
+
+    await requireOwnedSession(service, data.sessionId, user.id);
 
     const { documentId, sortOrder } = await insertDocumentForParseFn(
       service,
@@ -212,11 +418,33 @@ export const insertDocForParse = createServerFn({ method: "POST" })
     const user = await requireUser();
     const service = getSupabaseService();
 
+    await requireOwnedSession(service, data.sessionId, user.id);
+
     return await insertDocumentForParseFn(service, data.sessionId, data.sourceText, {
       sourceFileName: data.sourceFileName,
       userId: user.id,
     });
   });
+
+export const insertDocForParseResult = createServerFn({ method: "POST" })
+  .inputValidator(
+    (data: {
+      sessionId: string;
+      sourceText: string;
+      sourceFileName?: string;
+    }) => data,
+  )
+  .handler(async ({ data }) =>
+    asServerResult(async () => {
+      const user = await requireUser();
+      const service = getSupabaseService();
+      await requireOwnedSession(service, data.sessionId, user.id);
+      return await insertDocumentForParseFn(service, data.sessionId, data.sourceText, {
+        sourceFileName: data.sourceFileName,
+        userId: user.id,
+      });
+    }),
+  );
 
 export const extractUploadText = createServerFn({ method: "POST" })
   .inputValidator(
@@ -234,14 +462,34 @@ export const extractUploadText = createServerFn({ method: "POST" })
     return { text };
   });
 
+export const extractUploadTextResult = createServerFn({ method: "POST" })
+  .inputValidator(
+    (data: {
+      fileName: string;
+      fileBase64: string;
+    }) => data,
+  )
+  .handler(async ({ data }) =>
+    asServerResult(async () => {
+      await requireUser();
+      const text = await extractTextFromUpload(data);
+      if (!text.trim()) {
+        fail("VALIDATION_ERROR", "No extractable text found in uploaded file", 400);
+      }
+      return { text };
+    }),
+  );
+
 export const reparseDocument = createServerFn({ method: "POST" })
   .inputValidator((data: {
     documentId: string;
     parsePromptProfile?: "published_standard" | "interpretation";
   }) => data)
   .handler(async ({ data }) => {
-    await requireUser();
+    const user = await requireUser();
     const service = getSupabaseService();
+
+    await requireOwnedDocument(service, data.documentId, user.id);
 
     // Parse inline — reparseDocumentFn sets status to "parsing" internally
     const result = await reparseDocumentFn(service, data.documentId, {
@@ -252,55 +500,138 @@ export const reparseDocument = createServerFn({ method: "POST" })
     return { documentId: data.documentId, model: result.model };
   });
 
+export const reparseDocumentResult = createServerFn({ method: "POST" })
+  .inputValidator((data: {
+    documentId: string;
+    parsePromptProfile?: "published_standard" | "interpretation";
+  }) => data)
+  .handler(async ({ data }) =>
+    asServerResult(async () => {
+      const user = await requireUser();
+      const service = getSupabaseService();
+      await requireOwnedDocument(service, data.documentId, user.id);
+      const result = await reparseDocumentFn(service, data.documentId, {
+        openrouterApiKey: getOpenRouterKey(),
+        parsePromptProfile: data.parsePromptProfile,
+      });
+      return { documentId: data.documentId, model: result.model };
+    }),
+  );
+
 export const saveEdit = createServerFn({ method: "POST" })
   .inputValidator((data: { documentId: string; userMarkdown: string }) => data)
   .handler(async ({ data }) => {
-    await requireUser();
+    const user = await requireUser();
     const service = getSupabaseService();
+    await requireOwnedDocument(service, data.documentId, user.id);
     await saveDocumentEditFn(service, data.documentId, data.userMarkdown);
   });
+
+export const saveEditResult = createServerFn({ method: "POST" })
+  .inputValidator((data: { documentId: string; userMarkdown: string }) => data)
+  .handler(async ({ data }) =>
+    asServerResult(async () => {
+      const user = await requireUser();
+      const service = getSupabaseService();
+      await requireOwnedDocument(service, data.documentId, user.id);
+      await saveDocumentEditFn(service, data.documentId, data.userMarkdown);
+      return { saved: true };
+    }),
+  );
 
 export const removeDocument = createServerFn({ method: "POST" })
   .inputValidator((data: { documentId: string }) => data)
   .handler(async ({ data }) => {
-    await requireUser();
+    const user = await requireUser();
     const service = getSupabaseService();
+    await requireOwnedDocument(service, data.documentId, user.id);
     await deleteDocumentFn(service, data.documentId);
   });
+
+export const removeDocumentResult = createServerFn({ method: "POST" })
+  .inputValidator((data: { documentId: string }) => data)
+  .handler(async ({ data }) =>
+    asServerResult(async () => {
+      const user = await requireUser();
+      const service = getSupabaseService();
+      await requireOwnedDocument(service, data.documentId, user.id);
+      await deleteDocumentFn(service, data.documentId);
+      return { removed: true };
+    }),
+  );
 
 // ─── Chunk & Watermark ──────────────────────────────────────────────────────
 
 export const chunkDoc = createServerFn({ method: "POST" })
   .inputValidator((data: { documentId: string }) => data)
   .handler(async ({ data }) => {
-    await requireUser();
+    const user = await requireUser();
     const service = getSupabaseService();
+    await requireOwnedDocument(service, data.documentId, user.id);
     return await chunkDocumentFn(service, data.documentId);
   });
+
+export const chunkDocResult = createServerFn({ method: "POST" })
+  .inputValidator((data: { documentId: string }) => data)
+  .handler(async ({ data }) =>
+    asServerResult(async () => {
+      const user = await requireUser();
+      const service = getSupabaseService();
+      await requireOwnedDocument(service, data.documentId, user.id);
+      return await chunkDocumentFn(service, data.documentId);
+    }),
+  );
 
 export const watermarkDoc = createServerFn({ method: "POST" })
   .inputValidator((data: { documentId: string }) => data)
   .handler(async ({ data }) => {
-    await requireUser();
+    const user = await requireUser();
     const service = getSupabaseService();
+    await requireOwnedDocument(service, data.documentId, user.id);
     return await watermarkDocumentFn(service, data.documentId);
   });
+
+export const watermarkDocResult = createServerFn({ method: "POST" })
+  .inputValidator((data: { documentId: string }) => data)
+  .handler(async ({ data }) =>
+    asServerResult(async () => {
+      const user = await requireUser();
+      const service = getSupabaseService();
+      await requireOwnedDocument(service, data.documentId, user.id);
+      return await watermarkDocumentFn(service, data.documentId);
+    }),
+  );
 
 // ─── Session workflow ───────────────────────────────────────────────────────
 
 export const markComplete = createServerFn({ method: "POST" })
   .inputValidator((data: { sessionId: string }) => data)
   .handler(async ({ data }) => {
-    await requireUser();
+    const user = await requireUser();
     const service = getSupabaseService();
+    await requireOwnedSession(service, data.sessionId, user.id);
     await markSessionCompleteFn(service, data.sessionId);
   });
+
+export const markCompleteResult = createServerFn({ method: "POST" })
+  .inputValidator((data: { sessionId: string }) => data)
+  .handler(async ({ data }) =>
+    asServerResult(async () => {
+      const user = await requireUser();
+      const service = getSupabaseService();
+      await requireOwnedSession(service, data.sessionId, user.id);
+      await markSessionCompleteFn(service, data.sessionId);
+      return { completed: true };
+    }),
+  );
 
 export const generateCrosswalk = createServerFn({ method: "POST" })
   .inputValidator((data: { sessionId: string }) => data)
   .handler(async ({ data }) => {
-    await requireUser();
+    const user = await requireUser();
     const service = getSupabaseService();
+
+    await requireOwnedSession(service, data.sessionId, user.id);
 
     // Generate crosswalk inline — sets session status internally
     const result = await generateCrosswalkFn(service, data.sessionId, {
@@ -310,13 +641,45 @@ export const generateCrosswalk = createServerFn({ method: "POST" })
     return { sessionId: data.sessionId, model: result.model };
   });
 
+export const generateCrosswalkResult = createServerFn({ method: "POST" })
+  .inputValidator((data: { sessionId: string }) => data)
+  .handler(async ({ data }) =>
+    asServerResult(async () => {
+      const user = await requireUser();
+      const service = getSupabaseService();
+      await requireOwnedSession(service, data.sessionId, user.id);
+      const result = await generateCrosswalkFn(service, data.sessionId, {
+        openrouterApiKey: getOpenRouterKey(),
+      });
+      return {
+        sessionId: data.sessionId,
+        model: result.model,
+        crosswalkMarkdown: result.crosswalkMarkdown,
+        crosswalkChunks: result.crosswalkChunks,
+      };
+    }),
+  );
+
 export const saveCrosswalkEdit = createServerFn({ method: "POST" })
   .inputValidator((data: { sessionId: string; markdown: string }) => data)
   .handler(async ({ data }) => {
-    await requireUser();
+    const user = await requireUser();
     const service = getSupabaseService();
+    await requireOwnedSession(service, data.sessionId, user.id);
     await saveCrosswalkEditFn(service, data.sessionId, data.markdown);
   });
+
+export const saveCrosswalkEditResult = createServerFn({ method: "POST" })
+  .inputValidator((data: { sessionId: string; markdown: string }) => data)
+  .handler(async ({ data }) =>
+    asServerResult(async () => {
+      const user = await requireUser();
+      const service = getSupabaseService();
+      await requireOwnedSession(service, data.sessionId, user.id);
+      await saveCrosswalkEditFn(service, data.sessionId, data.markdown);
+      return { saved: true };
+    }),
+  );
 
 export const recordSessionQualitySnapshot = createServerFn({ method: "POST" })
   .inputValidator(
@@ -350,13 +713,48 @@ export const recordSessionQualitySnapshot = createServerFn({ method: "POST" })
     const user = await requireUser();
     const service = getSupabaseService();
 
-    const session = await getSessionFn(service, data.sessionId);
-    if (session.created_by !== user.id) {
-      throw new Error("Not authorized");
-    }
+    await requireOwnedSession(service, data.sessionId, user.id);
 
     return await recordSessionQualitySnapshotFn(service, data.sessionId, data.metrics, user.id);
   });
+
+export const recordSessionQualitySnapshotResult = createServerFn({ method: "POST" })
+  .inputValidator(
+    (data: {
+      sessionId: string;
+      metrics: {
+        quality: {
+          parseAccuracy: number;
+          chunkCoverage: number;
+          watermarkIntegrity: number;
+          promotionReadiness: number;
+          overall: number;
+        };
+        gatePass: {
+          parse: boolean;
+          chunk: boolean;
+          watermark: boolean;
+          promote: boolean;
+        };
+        counts: {
+          totalDocs: number;
+          promotedWatermarkedDocs: number;
+        };
+        canGenerateCrosswalk: boolean;
+        sessionStatus: "uploading" | "complete" | "crosswalk_pending" | "crosswalk_done" | "archived";
+        crosswalkPresent: boolean;
+      };
+    }) => data,
+  )
+  .handler(async ({ data }) =>
+    asServerResult(async () => {
+      const user = await requireUser();
+      const service = getSupabaseService();
+      await requireOwnedSession(service, data.sessionId, user.id);
+      const snapshot = await recordSessionQualitySnapshotFn(service, data.sessionId, data.metrics, user.id);
+      return snapshot;
+    }),
+  );
 
 // ─── Public sharing ──────────────────────────────────────────────────────
 
@@ -366,13 +764,22 @@ export const toggleSessionPublic = createServerFn({ method: "POST" })
     const user = await requireUser();
     const service = getSupabaseService();
 
-    const session = await getSessionFn(service, data.sessionId);
-    if (session.created_by !== user.id) {
-      throw new Error("Not authorized");
-    }
+    await requireOwnedSession(service, data.sessionId, user.id);
 
     await setSessionPublicFn(service, data.sessionId, data.isPublic);
   });
+
+export const toggleSessionPublicResult = createServerFn({ method: "POST" })
+  .inputValidator((data: { sessionId: string; isPublic: boolean }) => data)
+  .handler(async ({ data }) =>
+    asServerResult(async () => {
+      const user = await requireUser();
+      const service = getSupabaseService();
+      await requireOwnedSession(service, data.sessionId, user.id);
+      await setSessionPublicFn(service, data.sessionId, data.isPublic);
+      return { updated: true };
+    }),
+  );
 
 export const getPublicSessionData = createServerFn({ method: "GET" })
   .inputValidator((data: { sessionId: string }) => data)
@@ -384,10 +791,10 @@ export const getPublicSessionData = createServerFn({ method: "GET" })
     try {
       session = await getSessionFn(service, data.sessionId);
     } catch {
-      throw new Error("Session not found");
+      fail("RESOURCE_NOT_FOUND", "Session not found", 404);
     }
     if (!session.is_public) {
-      throw new Error("Session not found");
+      fail("RESOURCE_NOT_FOUND", "Session not found", 404);
     }
 
     const documents = await getSessionDocuments(service, data.sessionId);
@@ -406,8 +813,22 @@ export const promoteDoc = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const user = await requireUser();
     const service = getSupabaseService();
+
+    await requireOwnedDocument(service, data.documentId, user.id);
+
     return await promoteToEncyclopediaFn(service, data.documentId, user.id);
   });
+
+export const promoteDocResult = createServerFn({ method: "POST" })
+  .inputValidator((data: { documentId: string }) => data)
+  .handler(async ({ data }) =>
+    asServerResult(async () => {
+      const user = await requireUser();
+      const service = getSupabaseService();
+      await requireOwnedDocument(service, data.documentId, user.id);
+      return await promoteToEncyclopediaFn(service, data.documentId, user.id);
+    }),
+  );
 
 export const getEncyclopedia = createServerFn({ method: "GET" }).handler(
   async () => {
@@ -431,11 +852,33 @@ export const removeEncyclopediaEntry = createServerFn({ method: "POST" })
       .single();
 
     if (!entry || entry.created_by !== user.id) {
-      throw new Error("Not authorized");
+      fail("AUTH_FORBIDDEN", "Not authorized", 403);
     }
 
     await removeEncyclopediaEntryFn(service, data.entryId);
   });
+
+export const removeEncyclopediaEntryResult = createServerFn({ method: "POST" })
+  .inputValidator((data: { entryId: string }) => data)
+  .handler(async ({ data }) =>
+    asServerResult(async () => {
+      const user = await requireUser();
+      const service = getSupabaseService();
+
+      const { data: entry } = await service
+        .from("corpus_encyclopedia")
+        .select("created_by")
+        .eq("id", data.entryId)
+        .single();
+
+      if (!entry || entry.created_by !== user.id) {
+        fail("AUTH_FORBIDDEN", "Not authorized", 403);
+      }
+
+      await removeEncyclopediaEntryFn(service, data.entryId);
+      return { removed: true };
+    }),
+  );
 
 export const generateEncyclopediaCrosswalk = createServerFn({ method: "POST" })
   .inputValidator((data: { entryIds: string[] }) => data)
@@ -452,6 +895,21 @@ export const generateEncyclopediaCrosswalk = createServerFn({ method: "POST" })
 
     return result;
   });
+
+export const generateEncyclopediaCrosswalkResult = createServerFn({ method: "POST" })
+  .inputValidator((data: { entryIds: string[] }) => data)
+  .handler(async ({ data }) =>
+    asServerResult(async () => {
+      const user = await requireUser();
+      const service = getSupabaseService();
+      return await generateEncyclopediaCrosswalkFn(
+        service,
+        data.entryIds,
+        user.id,
+        { openrouterApiKey: getOpenRouterKey() },
+      );
+    }),
+  );
 
 // ─── Auth ───────────────────────────────────────────────────────────────────
 

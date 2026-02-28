@@ -8,14 +8,11 @@
 import { useState, useEffect } from "react";
 import { useSessionStore } from "@/lib/stores";
 import { computeWorkflowReadiness } from "@/lib/workflow-readiness";
-import {
-  generateCrosswalk,
-  saveCrosswalkEdit,
-  markComplete,
-} from "@/server/session-actions";
+import { useSessionWorkflowOps } from "@/lib/use-session-workflow-ops";
 
 export function CrosswalkPanel() {
   const store = useSessionStore();
+  const { generateCrosswalk, saveCrosswalkEdit, markSessionComplete } = useSessionWorkflowOps();
   const [generating, setGenerating] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(store.crosswalkMarkdown ?? "");
@@ -36,7 +33,7 @@ export function CrosswalkPanel() {
 
   async function handleMarkComplete() {
     if (!store.sessionId) return;
-    await markComplete({ data: { sessionId: store.sessionId } });
+    await markSessionComplete({ sessionId: store.sessionId });
     store.setSessionStatus("complete");
   }
 
@@ -57,7 +54,7 @@ export function CrosswalkPanel() {
 
       // Fire off crosswalk generation — polling picks up result when done
       generateCrosswalk({
-        data: { sessionId: store.sessionId },
+        sessionId: store.sessionId,
       }).catch((err) => {
         setError(err instanceof Error ? err.message : "Crosswalk generation failed");
         store.setSessionStatus("complete");
@@ -72,9 +69,7 @@ export function CrosswalkPanel() {
     if (!store.sessionId) return;
     setSaving(true);
     try {
-      await saveCrosswalkEdit({
-        data: { sessionId: store.sessionId, markdown: editText },
-      });
+      await saveCrosswalkEdit({ sessionId: store.sessionId, markdown: editText });
       store.setCrosswalk(editText);
       setEditing(false);
     } finally {

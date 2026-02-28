@@ -46,6 +46,8 @@ function Breadcrumbs() {
     }
   } else if (path.startsWith("/encyclopedia")) {
     crumbs.push({ label: "Encyclopedia" });
+  } else if (path.startsWith("/state")) {
+    crumbs.push({ label: "Global State" });
   }
 
   if (crumbs.length <= 1) return null;
@@ -107,6 +109,12 @@ function AuthedLayout() {
               className="text-sm text-slate-400 transition-colors hover:text-white"
             >
               Sessions
+            </Link>
+            <Link
+              to="/state"
+              className="text-sm text-slate-400 transition-colors hover:text-white"
+            >
+              Global State
             </Link>
             <Link
               to="/encyclopedia"

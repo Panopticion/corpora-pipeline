@@ -11,10 +11,8 @@ import {
   useEncyclopediaStore,
   type EncyclopediaDoc,
 } from "@/lib/encyclopedia-store";
-import {
-  removeEncyclopediaEntry,
-  generateEncyclopediaCrosswalk,
-} from "@/server/session-actions";
+import { useEncyclopediaOps } from "@/lib/use-encyclopedia-ops";
+import { stripTrailingWatermark } from "@/lib/watermark-utils";
 import { zipSync, strToU8 } from "fflate";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -99,6 +97,7 @@ export function EncyclopediaPage({
   serverEntries: EncyclopediaEntry[];
 }) {
   const store = useEncyclopediaStore();
+  const { removeEncyclopediaEntry, generateEncyclopediaCrosswalk } = useEncyclopediaOps();
   const [removing, setRemoving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [crosswalkError, setCrosswalkError] = useState<string | null>(null);
@@ -118,7 +117,7 @@ export function EncyclopediaPage({
     setRemoving(id);
     setError(null);
     try {
-      await removeEncyclopediaEntry({ data: { entryId: id } });
+      await removeEncyclopediaEntry({ entryId: id });
       store.removeEntry(id);
     } catch (err) {
       setError(
@@ -135,7 +134,7 @@ export function EncyclopediaPage({
 
     try {
       const result = await generateEncyclopediaCrosswalk({
-        data: { entryIds: Array.from(store.selectedIds) },
+        entryIds: Array.from(store.selectedIds),
       });
       const chunks = result.crosswalkChunks?.map((c: { sequence: number; section_title: string; heading_level: number; content: string; content_hash: string; token_count: number; heading_path: string[] }) => ({
         sequence: c.sequence,
@@ -166,12 +165,15 @@ export function EncyclopediaPage({
       files[`documents/${idx}-${entry.corpusId}.md`] = strToU8(entry.markdown);
     });
 
-    // Add watermarked chunks
+    // Add clean + watermarked chunks
     store.entries.forEach((entry) => {
       if (entry.chunks) {
         entry.chunks.forEach((chunk) => {
           const seq = String(chunk.sequence).padStart(3, "0");
           const chunkSlug = slugify(chunk.sectionTitle).slice(0, 40);
+          files[`chunks-clean/${entry.corpusId}/${seq}-${chunkSlug}.md`] = strToU8(
+            stripTrailingWatermark(chunk.content),
+          );
           files[`chunks/${entry.corpusId}/${seq}-${chunkSlug}.md`] = strToU8(
             chunk.content,
           );
@@ -187,6 +189,9 @@ export function EncyclopediaPage({
       store.crosswalkChunks.forEach((chunk) => {
         const seq = String(chunk.sequence).padStart(3, "0");
         const chunkSlug = slugify(chunk.sectionTitle).slice(0, 40);
+        files[`chunks-clean/crosswalk/${seq}-${chunkSlug}.md`] = strToU8(
+          stripTrailingWatermark(chunk.content),
+        );
         files[`chunks/crosswalk/${seq}-${chunkSlug}.md`] = strToU8(chunk.content);
       });
     }
@@ -394,10 +399,18 @@ export function EncyclopediaPage({
                         label="Copy Document"
                       />
                       {entry.chunks && (
-                        <CopyButton
-                          text={entry.chunks.map((c) => c.content).join("\n\n")}
-                          label={`Copy Chunks (${entry.chunks.length})`}
-                        />
+                        <>
+                          <CopyButton
+                            text={entry.chunks
+                              .map((c) => stripTrailingWatermark(c.content))
+                              .join("\n\n")}
+                            label={`Copy Chunks (${entry.chunks.length})`}
+                          />
+                          <CopyButton
+                            text={entry.chunks.map((c) => c.content).join("\n\n")}
+                            label="Copy Chunks + WM"
+                          />
+                        </>
                       )}
                     </div>
                     <pre className="max-h-96 overflow-auto rounded-md bg-surface-alt p-3 font-mono text-xs leading-relaxed text-text">
@@ -502,6 +515,9 @@ function buildReadme(entries: EncyclopediaDoc[], hasCrosswalk: boolean): string 
   if (withChunks.length > 0) {
     lines.push(
       "## Chunks",
+      "",
+      "Chunk files are exported both as clean text (`chunks-clean/`) and",
+      "watermarked provenance copies (`chunks/`).",
       "",
       "| Document | Chunks |",
       "|----------|--------|",

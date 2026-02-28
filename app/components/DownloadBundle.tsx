@@ -6,6 +6,7 @@
  */
 
 import { useSessionStore, type SessionDoc } from "@/lib/stores";
+import { stripTrailingWatermark } from "@/lib/watermark-utils";
 import { zipSync, strToU8 } from "fflate";
 
 export function DownloadBundle() {
@@ -50,13 +51,16 @@ export function DownloadBundle() {
       files[`documents/${idx}-${corpusId}.md`] = strToU8(getDocMarkdown(doc));
     });
 
-    // Add watermarked chunks for docs that completed the pipeline
+    // Add clean + watermarked chunks for docs that completed the pipeline
     watermarkedDocs.forEach((doc) => {
       const corpusId = getCorpusId(doc);
       if (doc.chunks) {
         doc.chunks.forEach((chunk) => {
           const seq = String(chunk.sequence).padStart(3, "0");
           const chunkSlug = slugify(chunk.sectionTitle).slice(0, 40);
+          files[`chunks-clean/${corpusId}/${seq}-${chunkSlug}.md`] = strToU8(
+            stripTrailingWatermark(chunk.content),
+          );
           files[`chunks/${corpusId}/${seq}-${chunkSlug}.md`] = strToU8(
             chunk.content,
           );
@@ -72,6 +76,9 @@ export function DownloadBundle() {
       store.crosswalkChunks.forEach((chunk) => {
         const seq = String(chunk.sequence).padStart(3, "0");
         const chunkSlug = slugify(chunk.sectionTitle).slice(0, 40);
+        files[`chunks-clean/crosswalk/${seq}-${chunkSlug}.md`] = strToU8(
+          stripTrailingWatermark(chunk.content),
+        );
         files[`chunks/crosswalk/${seq}-${chunkSlug}.md`] = strToU8(chunk.content);
       });
     }
@@ -103,7 +110,7 @@ export function DownloadBundle() {
           Download Bundle
         </h2>
         <p className="mb-4 text-xs text-text-muted">
-          Download all documents, watermarked chunks, and crosswalk as a ZIP.
+          Download all documents, clean + watermarked chunks, and crosswalk as a ZIP.
           {watermarkedDocs.length < readyDocs.length && (
             <span className="ml-1 text-yellow-600">
               {readyDocs.length - watermarkedDocs.length} doc(s) not yet
@@ -127,6 +134,18 @@ export function DownloadBundle() {
             ))}
             {watermarkedDocs.length > 0 && (
               <>
+                <p className="text-text-muted">chunks-clean/</p>
+                {watermarkedDocs.map((doc) => (
+                  <div key={`${doc.id}-clean`}>
+                    <p className="ml-4 text-text-muted">
+                      {getCorpusId(doc)}/
+                    </p>
+                    <p className="ml-8 text-text">
+                      {doc.chunks?.length ?? 0} clean chunk
+                      {(doc.chunks?.length ?? 0) !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                ))}
                 <p className="text-text-muted">chunks/</p>
                 {watermarkedDocs.map((doc) => (
                   <div key={doc.id}>
@@ -147,6 +166,13 @@ export function DownloadBundle() {
                 <p className="ml-4 text-text">crosswalk-v1.md</p>
                 {store.crosswalkChunks && (
                   <>
+                    <p className="ml-4 text-text-muted">
+                      chunks-clean/crosswalk/
+                    </p>
+                    <p className="ml-8 text-text">
+                      {store.crosswalkChunks.length} clean chunk
+                      {store.crosswalkChunks.length !== 1 ? "s" : ""}
+                    </p>
                     <p className="ml-4 text-text-muted">
                       chunks/crosswalk/
                     </p>
@@ -264,7 +290,8 @@ function buildReadme(
       "## Chunks",
       "",
       "Each document below has been split into semantic chunks on H2/H3 heading",
-      "boundaries, watermarked with provenance signatures, and placed in `chunks/`.",
+      "boundaries, then exported both as clean text (`chunks-clean/`) and",
+      "watermarked provenance copies (`chunks/`).",
       "",
       "| Document | Chunks |",
       "|----------|--------|",

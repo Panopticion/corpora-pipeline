@@ -11,12 +11,7 @@ import { useEffect, useMemo, useCallback, useState, useRef } from "react";
 import { Link } from "@tanstack/react-router";
 import { useSessionStore, type SessionDoc, type WorkspaceTab } from "@/lib/stores";
 import { computeWorkflowReadiness } from "@/lib/workflow-readiness";
-import {
-  getSessionWithDocuments,
-  recordSessionQualitySnapshot,
-  renameSession,
-  toggleSessionPublic,
-} from "@/server/session-actions";
+import { useSessionShellOps } from "@/lib/use-session-shell-ops";
 import { DocumentUploader } from "./DocumentUploader";
 import { DocumentEditor } from "./DocumentEditor";
 import { CrosswalkPanel } from "./CrosswalkPanel";
@@ -173,10 +168,12 @@ function EditableSessionName({
   sessionId,
   name,
   onRename,
+  onPersistRename,
 }: {
   sessionId: string;
   name: string;
   onRename: (name: string) => void;
+  onPersistRename: (input: { sessionId: string; name: string }) => Promise<unknown>;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name);
@@ -198,7 +195,7 @@ function EditableSessionName({
       return;
     }
     onRename(trimmed);
-    await renameSession({ data: { sessionId, name: trimmed } });
+    await onPersistRename({ sessionId, name: trimmed });
   }
 
   if (editing) {
@@ -240,10 +237,12 @@ function SharePanel({
   sessionId,
   isPublic,
   onToggle,
+  onPersistToggle,
 }: {
   sessionId: string;
   isPublic: boolean;
   onToggle: (isPublic: boolean) => void;
+  onPersistToggle: (input: { sessionId: string; isPublic: boolean }) => Promise<unknown>;
 }) {
   const [open, setOpen] = useState(false);
   const [toggling, setToggling] = useState(false);
@@ -255,7 +254,7 @@ function SharePanel({
     const next = !isPublic;
     onToggle(next);
     try {
-      await toggleSessionPublic({ data: { sessionId, isPublic: next } });
+      await onPersistToggle({ sessionId, isPublic: next });
     } catch {
       onToggle(!next); // revert on error
     } finally {
@@ -357,6 +356,12 @@ function SharePanel({
 
 export function CorpusWorkspace({ session, documents }: Props) {
   const store = useSessionStore();
+  const {
+    getSessionWithDocuments,
+    recordSessionQualitySnapshot,
+    renameSession,
+    toggleSessionPublic,
+  } = useSessionShellOps();
 
   // Map server props to client format (memoized)
   const serverDocs = useMemo(() => mapServerDocs(documents), [documents]);
@@ -404,7 +409,7 @@ export function CorpusWorkspace({ session, documents }: Props) {
   const refreshFromServer = useCallback(async () => {
     try {
       const fresh = await getSessionWithDocuments({
-        data: { sessionId: session.id },
+        sessionId: session.id,
       });
       store.hydrate({
         id: fresh.session.id,
@@ -476,10 +481,8 @@ export function CorpusWorkspace({ session, documents }: Props) {
     lastSnapshotKeyRef.current = snapshotKey;
 
     void recordSessionQualitySnapshot({
-      data: {
-        sessionId: session.id,
-        metrics: snapshotPayload,
-      },
+      sessionId: session.id,
+      metrics: snapshotPayload,
     }).catch(() => {
       // Best-effort: metrics persistence should never block UI interactions.
     });
@@ -542,6 +545,7 @@ export function CorpusWorkspace({ session, documents }: Props) {
               onRename={(n) => {
                 if (storeReady) store.setSessionName(n);
               }}
+              onPersistRename={renameSession}
             />
             <p className="text-xs text-text-muted">
               {sessionStatus === "uploading" ? "in progress" : sessionStatus.replace(/_/g, " ")} &middot; {docs.length} document
@@ -555,6 +559,7 @@ export function CorpusWorkspace({ session, documents }: Props) {
           onToggle={(v) => {
             if (storeReady) store.setIsPublic(v);
           }}
+          onPersistToggle={toggleSessionPublic}
         />
       </div>
 

@@ -8,18 +8,23 @@
 import { useEffect, useRef, useState } from "react";
 import { useSessionStore, type SessionDoc, type ChunkData } from "@/lib/stores";
 import {
-  saveEdit,
-  removeDocument,
-  reparseDocument,
-  chunkDoc,
-  watermarkDoc,
-  promoteDoc,
-} from "@/server/session-actions";
+  extractTrailingWatermark,
+  stripTrailingWatermark,
+} from "@/lib/watermark-utils";
+import { useSessionWorkflowOps } from "@/lib/use-session-workflow-ops";
 
 type ParsePromptProfile = "published_standard" | "interpretation";
 
 export function DocumentEditor() {
   const store = useSessionStore();
+  const {
+    saveEdit,
+    removeDocument,
+    reparseDocument,
+    chunkDocument,
+    watermarkDocument,
+    promoteDocument,
+  } = useSessionWorkflowOps();
   const [saving, setSaving] = useState<string | null>(null);
   const [reparsing, setReparsing] = useState<string | null>(null);
   const [chunking, setChunking] = useState<string | null>(null);
@@ -58,9 +63,7 @@ export function DocumentEditor() {
           onSave={async (markdown) => {
             setSaving(doc.id);
             try {
-              await saveEdit({
-                data: { documentId: doc.id, userMarkdown: markdown },
-              });
+              await saveEdit({ documentId: doc.id, userMarkdown: markdown });
               store.updateDocument(doc.id, {
                 userMarkdown: markdown,
                 status: "edited",
@@ -82,11 +85,9 @@ export function DocumentEditor() {
             setReparsing(null);
             // Fire off parse — polling picks up result when done
             reparseDocument({
-              data: {
-                documentId: doc.id,
-                parsePromptProfile:
-                  reparseProfileByDocId[doc.id] ?? "published_standard",
-              },
+              documentId: doc.id,
+              parsePromptProfile:
+                reparseProfileByDocId[doc.id] ?? "published_standard",
             }).catch(() => {
               store.updateDocument(doc.id, {
                 status: "failed",
@@ -107,9 +108,7 @@ export function DocumentEditor() {
             setChunking(doc.id);
             store.updateDocument(doc.id, { errorMessage: null });
             try {
-              const result = await chunkDoc({
-                data: { documentId: doc.id },
-              });
+              const result = await chunkDocument({ documentId: doc.id });
               store.updateDocument(doc.id, {
                 status: "chunked",
                 errorMessage: null,
@@ -135,9 +134,7 @@ export function DocumentEditor() {
             setWatermarking(doc.id);
             store.updateDocument(doc.id, { errorMessage: null });
             try {
-              const result = await watermarkDoc({
-                data: { documentId: doc.id },
-              });
+              const result = await watermarkDocument({ documentId: doc.id });
               store.updateDocument(doc.id, {
                 status: "watermarked",
                 errorMessage: null,
@@ -164,7 +161,7 @@ export function DocumentEditor() {
           onPromote={async () => {
             setPromoting(doc.id);
             try {
-              await promoteDoc({ data: { documentId: doc.id } });
+              await promoteDocument({ documentId: doc.id });
               store.updateDocument(doc.id, {
                 promotedAt: new Date().toISOString(),
                 errorMessage: null,
@@ -184,7 +181,7 @@ export function DocumentEditor() {
             });
           }}
           onDelete={async () => {
-            await removeDocument({ data: { documentId: doc.id } });
+            await removeDocument({ documentId: doc.id });
             store.removeDocument(doc.id);
             setReparseProfileByDocId((prev) => {
               const next = { ...prev };
@@ -767,12 +764,10 @@ function ChunkCard({
   isWatermarked: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const wordCount = chunk.content.split(/\s+/).filter(Boolean).length;
-
-  // Check if content has a watermark comment
-  const watermarkMatch = chunk.content.match(
-    /<!-- corpus-watermark:v1:[^\n]+ -->$/,
-  );
+  const [showWatermarkDetails, setShowWatermarkDetails] = useState(false);
+  const cleanContent = stripTrailingWatermark(chunk.content);
+  const wordCount = cleanContent.split(/\s+/).filter(Boolean).length;
+  const watermarkInfo = extractTrailingWatermark(chunk.content);
 
   return (
     <div className="rounded-md border border-border bg-surface-alt">
@@ -793,7 +788,7 @@ function ChunkCard({
           <span className="text-xs text-text-muted">
             {wordCount} words · ~{chunk.tokenCount} tokens
           </span>
-          {isWatermarked && watermarkMatch && (
+          {isWatermarked && watermarkInfo && (
             <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-700">
               WM
             </span>
@@ -807,14 +802,31 @@ function ChunkCard({
       {expanded && (
         <div className="border-t border-border px-3 py-2">
           <div className="mb-2 flex justify-end">
-            <CopyChunkButton content={chunk.content} />
+            <CopyChunkButtons
+              cleanContent={cleanContent}
+              watermarkedContent={chunk.content}
+              hasWatermark={Boolean(watermarkInfo)}
+            />
           </div>
           <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-text">
-            {chunk.content}
+            {cleanContent}
           </pre>
-          {watermarkMatch && (
-            <div className="mt-2 rounded bg-emerald-50 px-2 py-1 font-mono text-[10px] text-emerald-700 break-all">
-              {watermarkMatch[0]}
+          {watermarkInfo && (
+            <div className="mt-2 rounded bg-emerald-50 px-2 py-1 text-[10px] text-emerald-700">
+              <div className="flex items-center justify-between gap-3 font-mono">
+                <span>
+                  WM sig: {watermarkInfo.signature}
+                </span>
+                <button
+                  onClick={() => setShowWatermarkDetails((prev) => !prev)}
+                  className="rounded border border-emerald-300 px-1.5 py-0.5 text-[10px] hover:bg-emerald-100"
+                >
+                  {showWatermarkDetails ? "Hide" : "Show"} full watermark
+                </button>
+              </div>
+              {showWatermarkDetails && (
+                <div className="mt-1 font-mono break-all">{watermarkInfo.comment}</div>
+              )}
             </div>
           )}
         </div>
@@ -843,19 +855,43 @@ function CopyDocButton({ doc }: { doc: SessionDoc }) {
   );
 }
 
-function CopyChunkButton({ content }: { content: string }) {
-  const [copied, setCopied] = useState(false);
+function CopyChunkButtons({
+  cleanContent,
+  watermarkedContent,
+  hasWatermark,
+}: {
+  cleanContent: string;
+  watermarkedContent: string;
+  hasWatermark: boolean;
+}) {
+  const [copiedClean, setCopiedClean] = useState(false);
+  const [copiedWatermarked, setCopiedWatermarked] = useState(false);
+
   return (
-    <button
-      onClick={() => {
-        navigator.clipboard.writeText(content);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      }}
-      className="rounded border border-border px-2 py-0.5 text-[10px] text-text-muted hover:bg-surface"
-    >
-      {copied ? "Copied!" : "Copy"}
-    </button>
+    <div className="flex items-center gap-1.5">
+      <button
+        onClick={() => {
+          navigator.clipboard.writeText(cleanContent);
+          setCopiedClean(true);
+          setTimeout(() => setCopiedClean(false), 1500);
+        }}
+        className="rounded border border-border px-2 py-0.5 text-[10px] text-text-muted hover:bg-surface"
+      >
+        {copiedClean ? "Copied!" : "Copy clean"}
+      </button>
+      {hasWatermark && (
+        <button
+          onClick={() => {
+            navigator.clipboard.writeText(watermarkedContent);
+            setCopiedWatermarked(true);
+            setTimeout(() => setCopiedWatermarked(false), 1500);
+          }}
+          className="rounded border border-emerald-300 px-2 py-0.5 text-[10px] text-emerald-700 hover:bg-emerald-50"
+        >
+          {copiedWatermarked ? "Copied!" : "Copy with watermark"}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -867,26 +903,45 @@ function CopyChunksButton({
   doc: SessionDoc;
 }) {
   const [copied, setCopied] = useState(false);
+  const [copiedWithWatermark, setCopiedWithWatermark] = useState(false);
 
   return (
-    <button
-      onClick={() => {
-        // Extract frontmatter block from the document markdown
-        const markdown = doc.userMarkdown ?? doc.parsedMarkdown ?? "";
-        const fmMatch = markdown.match(/^---\r?\n[\s\S]*?\r?\n---/);
-        const frontmatter = fmMatch ? fmMatch[0] : "";
+    <div className="flex items-center gap-2">
+      <button
+        onClick={() => {
+          const markdown = doc.userMarkdown ?? doc.parsedMarkdown ?? "";
+          const fmMatch = markdown.match(/^---\r?\n[\s\S]*?\r?\n---/);
+          const frontmatter = fmMatch ? fmMatch[0] : "";
 
-        // Build output: frontmatter + chunks (headings serve as natural boundaries)
-        const body = chunks.map((c) => c.content).join("\n\n");
-        const text = frontmatter ? `${frontmatter}\n\n${body}` : body;
-        navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      }}
-      className="rounded-md border border-corpus-600 px-4 py-2 text-sm font-medium text-corpus-600 hover:bg-corpus-50"
-    >
-      {copied ? "Copied!" : `Copy All Chunks (${chunks.length})`}
-    </button>
+          const body = chunks
+            .map((c) => stripTrailingWatermark(c.content))
+            .join("\n\n");
+          const text = frontmatter ? `${frontmatter}\n\n${body}` : body;
+          navigator.clipboard.writeText(text);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        }}
+        className="rounded-md border border-corpus-600 px-4 py-2 text-sm font-medium text-corpus-600 hover:bg-corpus-50"
+      >
+        {copied ? "Copied!" : `Copy clean (${chunks.length})`}
+      </button>
+      <button
+        onClick={() => {
+          const markdown = doc.userMarkdown ?? doc.parsedMarkdown ?? "";
+          const fmMatch = markdown.match(/^---\r?\n[\s\S]*?\r?\n---/);
+          const frontmatter = fmMatch ? fmMatch[0] : "";
+
+          const body = chunks.map((c) => c.content).join("\n\n");
+          const text = frontmatter ? `${frontmatter}\n\n${body}` : body;
+          navigator.clipboard.writeText(text);
+          setCopiedWithWatermark(true);
+          setTimeout(() => setCopiedWithWatermark(false), 2000);
+        }}
+        className="rounded-md border border-emerald-300 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+      >
+        {copiedWithWatermark ? "Copied!" : "Copy with watermark"}
+      </button>
+    </div>
   );
 }
 
