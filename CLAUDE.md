@@ -1,5 +1,11 @@
 # Panopticon AI — Corpus Pipeline
 
+## Non-Negotiable Runtime Policy
+
+- Runtime governance is `diagnostic` / `advisory` only.
+- Do not hard-block, rewrite, or replace model output in request-time web flows.
+- Verification and gate outputs are telemetry/QA signals unless policy explicitly changes.
+
 ## Supabase
 
 - **Project ref:** `exjuzuhgsmrdbwaoxbio`
@@ -80,6 +86,43 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 {"jsonrpc":"2.0","method":"notifications/initialized"}
 {"jsonrpc":"2.0","id":2,"method":"tools/list"}' | npx tsx src/mcp-server.ts
 ```
+
+## Deploy Ops
+
+### Supabase migrations
+
+```bash
+supabase db push --project-ref <PROJECT_REF>
+supabase db push --project-ref exjuzuhgsmrdbwaoxbio
+```
+
+### Vercel deploy
+
+- Preferred path: push to the deployment branch and let Vercel build from Git.
+
+```bash
+git push origin main
+```
+
+- Optional direct CLI path:
+
+```bash
+vercel deploy
+vercel deploy --prod
+```
+
+### EC2 deploy
+
+- Goober runtime deploy is executed from the sibling `../goober` repo via SSM script.
+
+```bash
+cd ../goober
+./devops/deploy-release-ssm.sh
+```
+
+### Safety rule
+
+- Never push, deploy, or commit unless explicitly requested in-thread.
 
 ## Development
 
