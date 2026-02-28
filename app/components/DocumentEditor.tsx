@@ -16,6 +16,8 @@ import {
   promoteDoc,
 } from "@/server/session-actions";
 
+type ParsePromptProfile = "published_standard" | "interpretation";
+
 export function DocumentEditor() {
   const store = useSessionStore();
   const [saving, setSaving] = useState<string | null>(null);
@@ -23,6 +25,9 @@ export function DocumentEditor() {
   const [chunking, setChunking] = useState<string | null>(null);
   const [watermarking, setWatermarking] = useState<string | null>(null);
   const [promoting, setPromoting] = useState<string | null>(null);
+  const [reparseProfileByDocId, setReparseProfileByDocId] = useState<
+    Record<string, ParsePromptProfile>
+  >({});
 
   if (store.documents.length === 0) {
     return (
@@ -76,12 +81,27 @@ export function DocumentEditor() {
             });
             setReparsing(null);
             // Fire off parse — polling picks up result when done
-            reparseDocument({ data: { documentId: doc.id } }).catch(() => {
+            reparseDocument({
+              data: {
+                documentId: doc.id,
+                parsePromptProfile:
+                  reparseProfileByDocId[doc.id] ?? "published_standard",
+              },
+            }).catch(() => {
               store.updateDocument(doc.id, {
                 status: "failed",
                 errorMessage: "Parse failed — click Re-parse to retry",
               });
             });
+          }}
+          reparseProfile={
+            reparseProfileByDocId[doc.id] ?? "published_standard"
+          }
+          onReparseProfileChange={(profile) => {
+            setReparseProfileByDocId((prev) => ({
+              ...prev,
+              [doc.id]: profile,
+            }));
           }}
           onChunk={async () => {
             setChunking(doc.id);
@@ -166,6 +186,11 @@ export function DocumentEditor() {
           onDelete={async () => {
             await removeDocument({ data: { documentId: doc.id } });
             store.removeDocument(doc.id);
+            setReparseProfileByDocId((prev) => {
+              const next = { ...prev };
+              delete next[doc.id];
+              return next;
+            });
           }}
         />
       ))}
@@ -375,6 +400,8 @@ function DocumentCard({
   onPromote,
   onBackToEdit,
   onDelete,
+  reparseProfile,
+  onReparseProfileChange,
 }: {
   doc: SessionDoc;
   isActive: boolean;
@@ -392,6 +419,8 @@ function DocumentCard({
   onPromote: () => Promise<void>;
   onBackToEdit: () => void;
   onDelete: () => Promise<void>;
+  reparseProfile: ParsePromptProfile;
+  onReparseProfileChange: (profile: ParsePromptProfile) => void;
 }) {
   const markdown = doc.userMarkdown ?? doc.parsedMarkdown ?? "";
   const [editText, setEditText] = useState(markdown);
@@ -471,6 +500,24 @@ function DocumentCard({
       {/* Expanded content */}
       {isActive && (
         <div className="border-t border-border p-4">
+          <div className="mb-3 rounded-md border border-border bg-surface-alt/40 p-3">
+            <label className="flex items-center gap-2 text-sm text-text">
+              <input
+                type="checkbox"
+                checked={reparseProfile === "published_standard"}
+                onChange={(e) =>
+                  onReparseProfileChange(
+                    e.target.checked ? "published_standard" : "interpretation",
+                  )}
+                className="h-4 w-4"
+              />
+              Re-parse as published standard / primary source
+            </label>
+            <p className="mt-1 text-xs text-text-muted">
+              Checked = strict fidelity prompt. Unchecked = interpretation/secondary-source prompt.
+            </p>
+          </div>
+
           {doc.errorMessage && (
             <div className="mb-4 rounded-md border border-error/20 bg-error/5 p-3 text-sm text-error">
               {doc.errorMessage}
@@ -502,6 +549,7 @@ function DocumentCard({
               onChunk={onChunk}
               onDelete={onDelete}
               badge={badge}
+              reparseProfile={reparseProfile}
             />
           )}
         </div>
@@ -524,6 +572,7 @@ function EditView({
   onChunk,
   onDelete,
   badge,
+  reparseProfile,
 }: {
   doc: SessionDoc;
   editText: string;
@@ -536,6 +585,7 @@ function EditView({
   onChunk: () => Promise<void>;
   onDelete: () => Promise<void>;
   badge: { bg: string; label: string };
+  reparseProfile: ParsePromptProfile;
 }) {
   const canChunk = doc.status === "parsed" || doc.status === "edited";
 
@@ -592,6 +642,7 @@ function EditView({
             onClick={onReparse}
             disabled={reparsing}
             className="w-full rounded-md border border-border px-4 py-2 text-sm text-text-muted hover:bg-surface-alt disabled:opacity-50"
+            title={`Using ${reparseProfile === "published_standard" ? "published standard" : "interpretation"} prompt profile`}
           >
             {reparsing ? "Re-parsing..." : "Re-parse"}
           </button>
