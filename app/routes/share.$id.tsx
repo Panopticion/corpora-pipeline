@@ -166,7 +166,7 @@ function DocumentCard({
           )}
         </div>
         {markdown && (
-          <button
+          <button type="button"
             onClick={() => setExpanded(!expanded)}
             className="text-xs text-corpus-600 hover:text-corpus-700"
           >
@@ -225,7 +225,7 @@ function PublicSessionView() {
         {/* Tabs */}
         <div className="mb-6 rounded-lg border border-border bg-surface p-1">
           {tabs.map((tab) => (
-            <button
+            <button type="button"
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
               className={`inline-flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-corpus-500/40 ${

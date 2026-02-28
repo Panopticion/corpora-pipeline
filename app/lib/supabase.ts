@@ -8,6 +8,8 @@
 
 import { createBrowserClient, createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
+import process from "node:process";
+import type { Database } from "@/lib/supabase.types";
 
 export class MissingEnvironmentError extends Error {
   missing: string[];
@@ -45,9 +47,11 @@ function assertBrowserEnvironmentVariables(names: string[]) {
 
 // ─── Browser client (client-side) ───────────────────────────────────────────
 
-let browserClient: ReturnType<typeof createBrowserClient> | null = null;
+type BrowserSupabaseClient = ReturnType<typeof createBrowserClient<Database>>;
 
-export function getSupabaseBrowser() {
+let browserClient: BrowserSupabaseClient | null = null;
+
+export function getSupabaseBrowser(): BrowserSupabaseClient {
   if (browserClient) return browserClient;
 
   assertBrowserEnvironmentVariables([
@@ -55,7 +59,7 @@ export function getSupabaseBrowser() {
     "VITE_SUPABASE_ANON_KEY",
   ]);
 
-  browserClient = createBrowserClient(
+  browserClient = createBrowserClient<Database>(
     import.meta.env.VITE_SUPABASE_URL,
     import.meta.env.VITE_SUPABASE_ANON_KEY,
   );
@@ -87,7 +91,7 @@ export function getSupabaseServer(request: Request) {
     options?: Record<string, unknown>;
   }[] = [];
 
-  const client = createServerClient(
+  const client = createServerClient<Database>(
     process.env.VITE_SUPABASE_URL!,
     process.env.VITE_SUPABASE_ANON_KEY!,
     {
@@ -113,7 +117,7 @@ export function getSupabaseService() {
     "SUPABASE_SERVICE_ROLE_KEY",
   ]);
 
-  return createClient(
+  return createClient<Database>(
     process.env.VITE_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );

@@ -21,6 +21,8 @@
     "test:cli": "vitest run src/cli.test.ts",
     "test:validator": "vitest run src/validate.test.ts",
     "test:watch": "vitest",
+    "types:supabase": "npx supabase gen types typescript --linked --schema public,storage > app/lib/supabase.types.ts",
+    "types:supabase:check": "pnpm types:supabase && git diff --exit-code -- app/lib/supabase.types.ts",
     "git:health": "bash scripts/git-health-check.sh",
     "prepare": "husky"
   },

@@ -141,7 +141,7 @@ function SummaryCard({
   onClick: () => void;
 }) {
   return (
-    <button
+    <button type="button"
       onClick={onClick}
       className={`rounded-lg border p-4 text-left transition-colors ${
         selected
@@ -624,7 +624,7 @@ export function GlobalStateDashboard({
       return;
     }
 
-    const confirmed = window.confirm(
+    const confirmed = globalThis.confirm(
       `Run ${actionLabel(action, false)} for ${String(targets.length)} ${selectAcrossPages ? "filtered" : "selected"} document${targets.length === 1 ? "" : "s"}?`,
     );
     if (!confirmed) return;
@@ -732,7 +732,7 @@ export function GlobalStateDashboard({
   }
 
   function saveCurrentView() {
-    const name = window.prompt("Saved view name");
+    const name = globalThis.prompt("Saved view name");
     if (!name?.trim()) return;
 
     const view: SavedView = {
@@ -777,7 +777,7 @@ export function GlobalStateDashboard({
     const view = savedViews.find((item) => item.id === viewId);
     if (!view) return;
 
-    const confirmed = window.confirm(`Delete saved view "${view.name}"?`);
+    const confirmed = globalThis.confirm(`Delete saved view "${view.name}"?`);
     if (!confirmed) return;
 
     setSavedViews((current) => current.filter((item) => item.id !== viewId));
@@ -897,8 +897,8 @@ export function GlobalStateDashboard({
       }
     }
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    globalThis.addEventListener("keydown", handleKeyDown);
+    return () => globalThis.removeEventListener("keydown", handleKeyDown);
   }, [
     bulkAction,
     focusedDocumentId,
@@ -924,7 +924,7 @@ export function GlobalStateDashboard({
               <div className="flex items-center justify-between gap-2">
                 <span>{toast.text}</span>
                 {toast.actionLabel && toast.onAction && (
-                  <button
+                  <button type="button"
                     onClick={() => {
                       toast.onAction?.();
                       setToasts((current) => current.filter((item) => item.id !== toast.id));
@@ -962,7 +962,7 @@ export function GlobalStateDashboard({
             <option value="30">Auto-refresh: 30s</option>
             <option value="60">Auto-refresh: 60s</option>
           </select>
-          <button
+          <button type="button"
             onClick={() => {
               void refreshWithSpinner();
             }}
@@ -1024,7 +1024,7 @@ export function GlobalStateDashboard({
           <div className="space-y-2 text-xs text-text-muted">
             <div className="flex items-center justify-between rounded-md border border-border bg-surface-alt px-3 py-2">
               <span>1. Parse documents needing attention</span>
-              <button
+              <button type="button"
                 onClick={() => {
                   setPreset("attention");
                   setStage("parse");
@@ -1037,7 +1037,7 @@ export function GlobalStateDashboard({
             </div>
             <div className="flex items-center justify-between rounded-md border border-border bg-surface-alt px-3 py-2">
               <span>2. Chunk parsed documents</span>
-              <button
+              <button type="button"
                 onClick={() => {
                   setPreset("all");
                   setStage("chunk");
@@ -1050,7 +1050,7 @@ export function GlobalStateDashboard({
             </div>
             <div className="flex items-center justify-between rounded-md border border-border bg-surface-alt px-3 py-2">
               <span>3. Watermark for export integrity</span>
-              <button
+              <button type="button"
                 onClick={() => {
                   setPreset("all");
                   setStage("watermark");
@@ -1088,13 +1088,13 @@ export function GlobalStateDashboard({
           <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Filters</p>
           <div className="flex items-center gap-2">
             <p className="text-xs text-text-muted">{String(pagination.total)} results</p>
-            <button
+            <button type="button"
               onClick={() => setShowAdvancedControls((current) => !current)}
               className="rounded-md border border-border px-2.5 py-1 text-xs text-text-muted hover:bg-surface-alt"
             >
               {showAdvancedControls ? "Hide advanced" : "Show advanced"}
             </button>
-            <button
+            <button type="button"
               onClick={resetFilters}
               className="rounded-md border border-border px-2.5 py-1 text-xs text-text-muted hover:bg-surface-alt"
             >
@@ -1182,7 +1182,7 @@ export function GlobalStateDashboard({
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="text-[11px] text-text-muted">Quick filters:</span>
-          <button
+          <button type="button"
             onClick={() => {
               setPreset("attention");
               setStage("parse");
@@ -1192,7 +1192,7 @@ export function GlobalStateDashboard({
           >
             Needs Parse ({String(quickFilterCounts.needsParse)})
           </button>
-          <button
+          <button type="button"
             onClick={() => {
               setPreset("all");
               setStage("chunk");
@@ -1202,7 +1202,7 @@ export function GlobalStateDashboard({
           >
             Needs Chunk ({String(quickFilterCounts.needsChunk)})
           </button>
-          <button
+          <button type="button"
             onClick={() => {
               setPreset("all");
               setStage("watermark");
@@ -1212,7 +1212,7 @@ export function GlobalStateDashboard({
           >
             Needs Watermark ({String(quickFilterCounts.needsWatermark)})
           </button>
-          <button
+          <button type="button"
             onClick={() => {
               setPreset("failed");
               setStage("failed");
@@ -1254,7 +1254,7 @@ export function GlobalStateDashboard({
                 />
                 Enable write actions
               </label>
-              <button
+              <button type="button"
                 onClick={saveCurrentView}
                 className="rounded-md border border-border px-3 py-1.5 text-xs text-text-muted hover:bg-surface-alt"
               >
@@ -1279,7 +1279,7 @@ export function GlobalStateDashboard({
               </select>
 
               {selectedViewId && (
-                <button
+                <button type="button"
                   onClick={() => deleteView(selectedViewId)}
                   className="rounded-md border border-border px-3 py-1.5 text-xs text-text-muted hover:bg-surface-alt"
                 >
@@ -1287,21 +1287,21 @@ export function GlobalStateDashboard({
                 </button>
               )}
 
-              <button
+              <button type="button"
                 onClick={() => setShowColumnControls((current) => !current)}
                 className="rounded-md border border-border px-3 py-1.5 text-xs text-text-muted hover:bg-surface-alt"
               >
                 {showColumnControls ? "Hide columns" : "Show columns"}
               </button>
 
-              <button
+              <button type="button"
                 onClick={exportFailuresCsv}
                 className="rounded-md border border-border px-3 py-1.5 text-xs text-text-muted hover:bg-surface-alt"
               >
                 Export issues CSV
               </button>
 
-              <button
+              <button type="button"
                 onClick={() => setShowActionLog((current) => !current)}
                 className="rounded-md border border-border px-3 py-1.5 text-xs text-text-muted hover:bg-surface-alt"
               >
@@ -1353,7 +1353,7 @@ export function GlobalStateDashboard({
               Actions apply across all filtered pages and skip ineligible rows.
             </p>
           )}
-          <button
+          <button type="button"
             onClick={() => {
               void runBulkAction("parse");
             }}
@@ -1367,7 +1367,7 @@ export function GlobalStateDashboard({
                 ? "Bulk Retry Parse (all pages)"
                 : `Bulk Retry Parse (${String(selectedParseRows.length)})`}
           </button>
-          <button
+          <button type="button"
             onClick={() => {
               void runBulkAction("chunk");
             }}
@@ -1381,7 +1381,7 @@ export function GlobalStateDashboard({
                 ? "Bulk Chunk (all pages)"
                 : `Bulk Chunk (${String(selectedChunkRows.length)})`}
           </button>
-          <button
+          <button type="button"
             onClick={() => {
               void runBulkAction("watermark");
             }}
@@ -1395,7 +1395,7 @@ export function GlobalStateDashboard({
                 ? "Bulk Watermark (all pages)"
                 : `Bulk Watermark (${String(selectedWatermarkRows.length)})`}
           </button>
-          <button
+          <button type="button"
             onClick={() => {
               setSelectedDocumentIds(new Set());
               setSelectAcrossPages(false);
@@ -1439,14 +1439,14 @@ export function GlobalStateDashboard({
                   {visibleColumns.session && <th className="px-4 py-3">Session</th>}
                   {visibleColumns.stage && (
                     <th className="px-4 py-3">
-                      <button onClick={() => changeSort("stage")} className="hover:text-text">
+                      <button type="button" onClick={() => changeSort("stage")} className="hover:text-text">
                         Stage {sortIndicator("stage")}
                       </button>
                     </th>
                   )}
                   {visibleColumns.status && (
                     <th className="px-4 py-3">
-                      <button onClick={() => changeSort("status")} className="hover:text-text">
+                      <button type="button" onClick={() => changeSort("status")} className="hover:text-text">
                         Status {sortIndicator("status")}
                       </button>
                     </th>
@@ -1454,7 +1454,7 @@ export function GlobalStateDashboard({
                   {visibleColumns.blocker && <th className="px-4 py-3">Blocker</th>}
                   {visibleColumns.updated && (
                     <th className="px-4 py-3">
-                      <button onClick={() => changeSort("updatedAt")} className="hover:text-text">
+                      <button type="button" onClick={() => changeSort("updatedAt")} className="hover:text-text">
                         Updated {sortIndicator("updatedAt")}
                       </button>
                     </th>
@@ -1570,7 +1570,7 @@ export function GlobalStateDashboard({
                               Open session
                             </Link>
                             {rowAction && (
-                              <button
+                              <button type="button"
                                 onClick={() => {
                                   void runRowAction(row);
                                 }}
@@ -1597,7 +1597,7 @@ export function GlobalStateDashboard({
               {String(Math.min(pageStart + pagination.pageSize, pagination.total))} of {String(pagination.total)}
             </p>
             <div className="flex items-center gap-2">
-              <button
+              <button type="button"
                 onClick={() => setPage((current) => Math.max(1, current - 1))}
                 disabled={page <= 1}
                 className="rounded-md border border-border px-2 py-1 hover:bg-surface-alt disabled:opacity-50"
@@ -1607,7 +1607,7 @@ export function GlobalStateDashboard({
               <span>
                 Page {String(page)} / {String(totalPages)}
               </span>
-              <button
+              <button type="button"
                 onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
                 disabled={page >= totalPages}
                 className="rounded-md border border-border px-2 py-1 hover:bg-surface-alt disabled:opacity-50"
@@ -1623,7 +1623,7 @@ export function GlobalStateDashboard({
         <div className="rounded-lg border border-border bg-surface p-4">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-text">Operator Action Log</h2>
-            <button
+            <button type="button"
               onClick={() => setActionLog([])}
               className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:bg-surface-alt"
             >

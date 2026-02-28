@@ -1,0 +1,29 @@
+{
+  "lint": {
+    "include": [
+      "app/components",
+      "app/routes",
+      "app/lib",
+      "app/client.tsx",
+      "app/router.tsx",
+      "app/ssr.tsx"
+    ],
+    "exclude": [
+      "docs/.vitepress",
+      "node_modules",
+      ".nitro",
+      ".output",
+      ".tanstack",
+      ".vercel",
+      "app/server",
+      "app/routeTree.gen.ts",
+      "src",
+      "scripts"
+    ],
+    "rules": {
+      "exclude": [
+        "no-sloppy-imports"
+      ]
+    }
+  }
+}

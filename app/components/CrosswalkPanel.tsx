@@ -87,7 +87,7 @@ export function CrosswalkPanel() {
           <p className="text-sm text-text-muted">
             No documents yet. Upload and parse at least one document to begin a crosswalk.
           </p>
-          <button
+          <button type="button"
             onClick={() => store.setTab("upload")}
             className="mt-3 rounded-md border border-border bg-white px-4 py-2 text-xs font-medium text-text hover:bg-surface-alt"
           >
@@ -160,7 +160,7 @@ export function CrosswalkPanel() {
           </div>
         )}
 
-        <button
+        <button type="button"
           onClick={handleGenerate}
           disabled={!canGenerate || generating || isPending}
           className="rounded-md bg-corpus-600 px-6 py-2 text-sm font-medium text-white hover:bg-corpus-700 disabled:opacity-50"
@@ -201,14 +201,14 @@ export function CrosswalkPanel() {
             <div className="flex gap-2">
               {editing ? (
                 <>
-                  <button
+                  <button type="button"
                     onClick={handleSave}
                     disabled={saving}
                     className="rounded-md bg-corpus-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-corpus-700 disabled:opacity-50"
                   >
                     {saving ? "Saving..." : "Save"}
                   </button>
-                  <button
+                  <button type="button"
                     onClick={() => {
                       setEditing(false);
                       setEditText(store.crosswalkMarkdown ?? "");
@@ -219,14 +219,14 @@ export function CrosswalkPanel() {
                   </button>
                 </>
               ) : (
-                <button
+                <button type="button"
                   onClick={() => setEditing(true)}
                   className="rounded-md border border-border px-4 py-1.5 text-xs text-text-muted hover:bg-surface-alt"
                 >
                   Edit
                 </button>
               )}
-              <button
+              <button type="button"
                 onClick={() => {
                   navigator.clipboard.writeText(store.crosswalkMarkdown ?? "");
                   setCopied(true);

@@ -99,7 +99,7 @@ function SessionListPage() {
 
   async function handleDelete(sessionId: string) {
     await removeSession({ data: { sessionId } });
-    window.location.reload();
+    globalThis.location.reload();
   }
 
   const statusColors: Record<string, string> = {
@@ -178,14 +178,14 @@ function SessionListPage() {
               placeholder="Session name..."
               className="rounded-md border border-border bg-white px-3 py-2 text-sm text-text outline-none focus:border-corpus-500 focus:ring-1 focus:ring-corpus-500"
             />
-            <button
+            <button type="button"
               onClick={() => handleCreate(newName)}
               disabled={creating}
               className="rounded-md bg-corpus-600 px-4 py-2 text-sm font-medium text-white hover:bg-corpus-700 disabled:opacity-50"
             >
               {creating ? "Creating..." : "Create"}
             </button>
-            <button
+            <button type="button"
               onClick={() => {
                 setShowNameInput(false);
                 setNewName("");
@@ -196,7 +196,7 @@ function SessionListPage() {
             </button>
           </div>
         ) : (
-          <button
+          <button type="button"
             onClick={() => setShowNameInput(true)}
             disabled={creating}
             className="rounded-md bg-corpus-600 px-4 py-2 text-sm font-medium text-white hover:bg-corpus-700 disabled:opacity-50"
@@ -247,7 +247,7 @@ function SessionListPage() {
                 >
                   {statusLabels[session.status] ?? session.status.replace(/_/g, " ")}
                 </span>
-                <button
+                <button type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleDelete(session.id);

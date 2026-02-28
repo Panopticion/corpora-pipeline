@@ -20,7 +20,7 @@ function ResetPasswordPage() {
     const supabase = getSupabaseBrowser();
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(
       email,
-      { redirectTo: `${window.location.origin}/auth/callback?type=recovery` },
+      { redirectTo: `${globalThis.location.origin}/auth/callback?type=recovery` },
     );
 
     if (resetError) {

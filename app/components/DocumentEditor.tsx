@@ -40,7 +40,7 @@ export function DocumentEditor() {
         <p className="text-sm text-text-muted">
           No documents yet. Go to the Upload tab to add compliance documents.
         </p>
-        <button
+        <button type="button"
           onClick={() => store.setTab("upload")}
           className="mt-4 rounded-md border border-border bg-white px-4 py-2 text-xs font-medium text-text hover:bg-surface-alt"
         >
@@ -79,7 +79,7 @@ export function DocumentEditor() {
               setSaving(null);
             }
           }}
-          onReparse={async () => {
+          onReparse={() => {
             setReparsing(doc.id);
             // Set local status immediately so UI shows spinner
             store.updateDocument(doc.id, {
@@ -90,16 +90,18 @@ export function DocumentEditor() {
             });
             setReparsing(null);
             // Fire off parse — polling picks up result when done
-            reparseDocument({
+            return reparseDocument({
               documentId: doc.id,
               parsePromptProfile:
                 reparseProfileByDocId[doc.id] ?? "published_standard",
-            }).catch(() => {
-              store.updateDocument(doc.id, {
-                status: "failed",
-                errorMessage: "Parse failed — click Re-parse to retry",
+            })
+              .then(() => undefined)
+              .catch(() => {
+                store.updateDocument(doc.id, {
+                  status: "failed",
+                  errorMessage: "Parse failed — click Re-parse to retry",
+                });
               });
-            });
           }}
           reparseProfile={
             reparseProfileByDocId[doc.id] ?? "published_standard"
@@ -371,7 +373,7 @@ function NextStepButton({
   const h = handlers[action.kind];
 
   return (
-    <button
+    <button type="button"
       onClick={(e) => {
         e.stopPropagation();
         h.onClick();
@@ -621,7 +623,7 @@ function EditView({
         />
 
         <div className="space-y-2 pt-2">
-          <button
+          <button type="button"
             onClick={() => onSave(editText)}
             disabled={saving}
             className="w-full rounded-md bg-corpus-600 px-4 py-2 text-sm font-medium text-white hover:bg-corpus-700 disabled:opacity-50"
@@ -630,7 +632,7 @@ function EditView({
           </button>
 
           {canChunk && (
-            <button
+            <button type="button"
               onClick={onChunk}
               disabled={chunking}
               className="w-full rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
@@ -639,7 +641,7 @@ function EditView({
             </button>
           )}
 
-          <button
+          <button type="button"
             onClick={onReparse}
             disabled={reparsing}
             className="w-full rounded-md border border-border px-4 py-2 text-sm text-text-muted hover:bg-surface-alt disabled:opacity-50"
@@ -647,7 +649,7 @@ function EditView({
           >
             {reparsing ? "Re-parsing..." : "Re-parse"}
           </button>
-          <button
+          <button type="button"
             onClick={onDelete}
             className="w-full rounded-md border border-error/30 px-4 py-2 text-sm text-error hover:bg-error/5"
           >
@@ -713,7 +715,7 @@ function ChunkReview({
       {/* Action buttons */}
       <div className="flex flex-wrap items-center gap-3">
         {!isWatermarked && (
-          <button
+          <button type="button"
             onClick={onWatermark}
             disabled={watermarking}
             className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
@@ -725,7 +727,7 @@ function ChunkReview({
           <>
             <CopyDocButton doc={doc} />
             <CopyChunksButton chunks={chunks} doc={doc} />
-            <button
+            <button type="button"
               onClick={onPromote}
               disabled={promoting}
               className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
@@ -742,7 +744,7 @@ function ChunkReview({
             </button>
           </>
         )}
-        <button
+        <button type="button"
           onClick={onBackToEdit}
           className="rounded-md border border-border px-4 py-2 text-sm text-text-muted hover:bg-surface-alt"
         >
@@ -823,7 +825,7 @@ function ChunkCard({
                 <span>
                   WM sig: {watermarkInfo.signature}
                 </span>
-                <button
+                <button type="button"
                   onClick={() => setShowWatermarkDetails((prev) => !prev)}
                   className="rounded border border-emerald-300 px-1.5 py-0.5 text-[10px] hover:bg-emerald-100"
                 >
@@ -848,7 +850,7 @@ function CopyDocButton({ doc }: { doc: SessionDoc }) {
   const markdown = doc.userMarkdown ?? doc.parsedMarkdown ?? "";
 
   return (
-    <button
+    <button type="button"
       onClick={() => {
         navigator.clipboard.writeText(markdown);
         setCopied(true);
@@ -875,7 +877,7 @@ function CopyChunkButtons({
 
   return (
     <div className="flex items-center gap-1.5">
-      <button
+      <button type="button"
         onClick={() => {
           navigator.clipboard.writeText(cleanContent);
           setCopiedClean(true);
@@ -886,7 +888,7 @@ function CopyChunkButtons({
         {copiedClean ? "Copied!" : "Copy clean"}
       </button>
       {hasWatermark && (
-        <button
+        <button type="button"
           onClick={() => {
             navigator.clipboard.writeText(watermarkedContent);
             setCopiedWatermarked(true);
@@ -913,7 +915,7 @@ function CopyChunksButton({
 
   return (
     <div className="flex items-center gap-2">
-      <button
+      <button type="button"
         onClick={() => {
           const markdown = doc.userMarkdown ?? doc.parsedMarkdown ?? "";
           const fmMatch = markdown.match(/^---\r?\n[\s\S]*?\r?\n---/);
@@ -931,7 +933,7 @@ function CopyChunksButton({
       >
         {copied ? "Copied!" : `Copy clean (${chunks.length})`}
       </button>
-      <button
+      <button type="button"
         onClick={() => {
           const markdown = doc.userMarkdown ?? doc.parsedMarkdown ?? "";
           const fmMatch = markdown.match(/^---\r?\n[\s\S]*?\r?\n---/);

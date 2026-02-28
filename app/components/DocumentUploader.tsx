@@ -204,7 +204,7 @@ export function DocumentUploader() {
         </p>
 
         <div className="mb-4 flex flex-wrap items-center gap-2">
-          <button
+          <button type="button"
             onClick={() => {
               setSourceText(SAMPLE_DOCUMENT_TEXT);
               setFileName("sample-compliance-policy.md");
@@ -225,7 +225,7 @@ export function DocumentUploader() {
             onChange={handleFileSelect}
             className="hidden"
           />
-          <button
+          <button type="button"
             onClick={() => fileInputRef.current?.click()}
             className="rounded-md border border-border bg-surface px-4 py-2 text-sm text-text-muted hover:bg-surface-alt"
           >
@@ -284,7 +284,7 @@ export function DocumentUploader() {
         )}
 
         {/* Parse button */}
-        <button
+        <button type="button"
           onClick={handleParse}
           disabled={!sourceText.trim() || submitting || extracting}
           className="rounded-md bg-corpus-600 px-6 py-2 text-sm font-medium text-white hover:bg-corpus-700 disabled:opacity-50"

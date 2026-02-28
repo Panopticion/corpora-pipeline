@@ -218,7 +218,7 @@ function EditableSessionName({
   }
 
   return (
-    <button
+    <button type="button"
       onClick={() => setEditing(true)}
       className="group flex items-center gap-1.5 text-lg font-semibold text-text hover:text-corpus-600"
       title="Click to rename"
@@ -270,7 +270,7 @@ function SharePanel({
 
   return (
     <div className="relative">
-      <button
+      <button type="button"
         onClick={() => setOpen(!open)}
         className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
           isPublic
@@ -294,7 +294,7 @@ function SharePanel({
         <div className="absolute right-0 top-full z-10 mt-2 w-72 rounded-lg border border-border bg-surface p-4 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <span className="text-sm font-medium text-text">Share session</span>
-            <button
+            <button type="button"
               onClick={() => setOpen(false)}
               className="text-text-muted hover:text-text"
             >
@@ -311,7 +311,7 @@ function SharePanel({
                 Anyone with the link can view
               </p>
             </div>
-            <button
+            <button type="button"
               onClick={handleToggle}
               disabled={toggling}
               className={`relative h-5 w-9 rounded-full transition-colors ${
@@ -337,7 +337,7 @@ function SharePanel({
                   value={shareUrl}
                   className="flex-1 bg-transparent text-xs text-text outline-none"
                 />
-                <button
+                <button type="button"
                   onClick={handleCopy}
                   className="shrink-0 rounded bg-corpus-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-corpus-700"
                 >
@@ -615,7 +615,7 @@ export function CorpusWorkspace({ session, documents }: Props) {
             </ul>
             <div className="mt-2 flex flex-wrap gap-2">
               {notParseReadyDocs.length > 0 && (
-                <button
+                <button type="button"
                   onClick={() => openDocumentsFor(notParseReadyDocs[0]?.id ?? null)}
                   className="rounded-md border border-warning/30 bg-white px-2 py-1 text-xs text-warning hover:bg-warning/10"
                 >
@@ -623,7 +623,7 @@ export function CorpusWorkspace({ session, documents }: Props) {
                 </button>
               )}
               {notChunkedDocs.length > 0 && (
-                <button
+                <button type="button"
                   onClick={() => openDocumentsFor(notChunkedDocs[0]?.id ?? null)}
                   className="rounded-md border border-warning/30 bg-white px-2 py-1 text-xs text-warning hover:bg-warning/10"
                 >
@@ -631,7 +631,7 @@ export function CorpusWorkspace({ session, documents }: Props) {
                 </button>
               )}
               {notWatermarkedDocs.length > 0 && (
-                <button
+                <button type="button"
                   onClick={() => openDocumentsFor(notWatermarkedDocs[0]?.id ?? null)}
                   className="rounded-md border border-warning/30 bg-white px-2 py-1 text-xs text-warning hover:bg-warning/10"
                 >
@@ -639,7 +639,7 @@ export function CorpusWorkspace({ session, documents }: Props) {
                 </button>
               )}
               {notPromotedDocs.length > 0 && (
-                <button
+                <button type="button"
                   onClick={() => openDocumentsFor(notPromotedDocs[0]?.id ?? null)}
                   className="rounded-md border border-warning/30 bg-white px-2 py-1 text-xs text-warning hover:bg-warning/10"
                 >
@@ -647,7 +647,7 @@ export function CorpusWorkspace({ session, documents }: Props) {
                 </button>
               )}
               {readiness.canGenerateCrosswalk && (
-                <button
+                <button type="button"
                   onClick={() => handleSetTab("crosswalk")}
                   className="rounded-md border border-emerald-300 bg-white px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-50"
                 >
@@ -662,7 +662,7 @@ export function CorpusWorkspace({ session, documents }: Props) {
       {/* Tabs */}
       <div className="mb-2 rounded-lg border border-border bg-surface p-1">
         {tabs.map((tab) => (
-          <button
+          <button type="button"
             key={tab.key}
             onClick={() => handleSetTab(tab.key)}
             className={`inline-flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-corpus-500/40 ${
@@ -698,14 +698,14 @@ export function CorpusWorkspace({ session, documents }: Props) {
           First success checklist
         </p>
         <div className="grid gap-2 sm:grid-cols-3">
-          <button
+          <button type="button"
             onClick={() => handleSetTab("upload")}
             className="flex items-center justify-between rounded-md border border-border bg-surface-alt px-3 py-2 text-xs text-text-muted hover:bg-surface"
           >
             <span>1. Upload a document</span>
             <span className={docs.length > 0 ? "text-emerald-700" : "text-text-muted"}>{docs.length > 0 ? "✓" : "•"}</span>
           </button>
-          <button
+          <button type="button"
             onClick={() => handleSetTab("documents")}
             className="flex items-center justify-between rounded-md border border-border bg-surface-alt px-3 py-2 text-xs text-text-muted hover:bg-surface"
           >
@@ -714,12 +714,12 @@ export function CorpusWorkspace({ session, documents }: Props) {
               {docs.some((d) => d.status === "watermarked") ? "✓" : "•"}
             </span>
           </button>
-          <button
+          <button type="button"
             onClick={() => handleSetTab("crosswalk")}
             className="flex items-center justify-between rounded-md border border-border bg-surface-alt px-3 py-2 text-xs text-text-muted hover:bg-surface"
           >
             <span>3. Generate crosswalk</span>
-            <span className={Boolean(crosswalkMd) ? "text-emerald-700" : "text-text-muted"}>{crosswalkMd ? "✓" : "•"}</span>
+            <span className={crosswalkMd ? "text-emerald-700" : "text-text-muted"}>{crosswalkMd ? "✓" : "•"}</span>
           </button>
         </div>
       </div>

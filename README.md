@@ -172,6 +172,20 @@ npm run typecheck # TypeScript strict mode
 npm run lint      # ESLint
 ```
 
+## Supabase Type Generation
+
+Generate strongly typed DB definitions into [app/lib/supabase.types.ts](app/lib/supabase.types.ts):
+
+```bash
+pnpm types:supabase
+```
+
+Verify generated types are up-to-date (useful in CI after SQL migrations):
+
+```bash
+pnpm types:supabase:check
+```
+
 ## Compliance Mapping
 
 Panopticon maps to NIST AI RMF, EU AI Act Articles 10–14, and DoD Responsible AI principles.

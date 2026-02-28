@@ -232,7 +232,7 @@ export function DownloadBundle() {
           </div>
         </div>
 
-        <button
+        <button type="button"
           onClick={handleDownload}
           disabled={!hasContent}
           className="rounded-md bg-corpus-600 px-6 py-2 text-sm font-medium text-white hover:bg-corpus-700 disabled:opacity-50"
@@ -240,7 +240,7 @@ export function DownloadBundle() {
           Download ZIP
         </button>
 
-        <button
+        <button type="button"
           onClick={downloadSessionReceipt}
           className="ml-2 rounded-md border border-border px-4 py-2 text-xs text-text-muted hover:bg-surface-alt"
         >
@@ -250,7 +250,7 @@ export function DownloadBundle() {
         {!hasContent && (
           <div className="mt-4 rounded-md border border-border bg-surface-alt p-3 text-xs text-text-muted">
             No exportable content yet. Next: parse in Documents, then return here to export.
-            <button
+            <button type="button"
               onClick={() => store.setTab("documents")}
               className="ml-2 rounded-md border border-border bg-white px-2.5 py-1 text-xs font-medium text-text hover:bg-surface"
             >
@@ -284,7 +284,7 @@ export function DownloadBundle() {
                     )}
                   </p>
                 </div>
-                <button
+                <button type="button"
                   onClick={() => handleCopyDocument(doc)}
                   className="rounded-md border border-border px-3 py-1.5 text-xs text-text-muted hover:bg-surface-alt"
                 >
@@ -307,7 +307,7 @@ export function DownloadBundle() {
                     )}
                   </p>
                 </div>
-                <button
+                <button type="button"
                   onClick={() =>
                     navigator.clipboard.writeText(
                       store.crosswalkMarkdown ?? "",

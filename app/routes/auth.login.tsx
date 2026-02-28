@@ -46,7 +46,7 @@ function LoginPage() {
     const { error: authError } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: `${globalThis.location.origin}/auth/callback`,
       },
     });
 
@@ -71,7 +71,7 @@ function LoginPage() {
             We sent a sign-in link to <strong>{email}</strong>. Click the link
             in the email to sign in.
           </p>
-          <button
+          <button type="button"
             onClick={() => setMagicLinkSent(false)}
             className="text-sm text-corpus-600 hover:underline"
           >

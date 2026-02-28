@@ -28,30 +28,30 @@ function AuthCallbackPage() {
     supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") {
         // User clicked reset password link — send to update password page
-        window.location.href = "/auth/update-password";
+        globalThis.location.href = "/auth/update-password";
       } else if (
         event === "SIGNED_IN" ||
         event === "USER_UPDATED" ||
         event === "TOKEN_REFRESHED"
       ) {
         // Successful auth — redirect to app
-        window.location.href = "/sessions";
+        globalThis.location.href = "/sessions";
       } else if (event === "SIGNED_OUT") {
-        window.location.href = "/auth/login";
+        globalThis.location.href = "/auth/login";
       }
     });
 
     // Also handle the case where the hash is processed immediately
-    const hash = window.location.hash;
+    const hash = globalThis.location.hash;
     if (!hash) {
       // No hash fragment — check URL params for error
-      const params = new URLSearchParams(window.location.search);
+      const params = new URLSearchParams(globalThis.location.search);
       const errorDesc = params.get("error_description");
       if (errorDesc) {
         setError(errorDesc);
       } else {
         // No hash, no error — just redirect
-        window.location.href = "/sessions";
+        globalThis.location.href = "/sessions";
       }
     }
   }, []);

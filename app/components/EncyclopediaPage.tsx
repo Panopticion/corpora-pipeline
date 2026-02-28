@@ -73,7 +73,7 @@ function CopyButton({
   const [copied, setCopied] = useState(false);
 
   return (
-    <button
+    <button type="button"
       onClick={() => {
         navigator.clipboard.writeText(text);
         setCopied(true);
@@ -223,7 +223,7 @@ export function EncyclopediaPage({
           </p>
         </div>
         {store.entries.length > 0 && (
-          <button
+          <button type="button"
             onClick={handleDownloadZip}
             className="rounded-md bg-corpus-600 px-4 py-2 text-sm font-medium text-white hover:bg-corpus-700"
           >
@@ -266,14 +266,14 @@ export function EncyclopediaPage({
             </div>
             <div className="flex items-center gap-2">
               {selectedCount > 0 && (
-                <button
+                <button type="button"
                   onClick={() => store.clearSelection()}
                   className="rounded-md border border-border px-3 py-1.5 text-xs text-text-muted hover:bg-surface-alt"
                 >
                   Clear
                 </button>
               )}
-              <button
+              <button type="button"
                 onClick={handleCrosswalk}
                 disabled={!canCrosswalk || store.crosswalkGenerating}
                 className="rounded-md bg-corpus-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-corpus-700 disabled:opacity-50"
@@ -359,7 +359,7 @@ export function EncyclopediaPage({
                     >
                       {entry.tier.replace("_", " ")}
                     </span>
-                    <button
+                    <button type="button"
                       onClick={() => handleRemove(entry.id)}
                       disabled={removing === entry.id}
                       className="text-xs text-text-muted hover:text-error disabled:opacity-50"
@@ -441,7 +441,7 @@ export function EncyclopediaPage({
             <div className="flex gap-2">
               {editingCrosswalk ? (
                 <>
-                  <button
+                  <button type="button"
                     onClick={() => {
                       store.setCrosswalk(crosswalkEdit);
                       setEditingCrosswalk(false);
@@ -450,7 +450,7 @@ export function EncyclopediaPage({
                   >
                     Save
                   </button>
-                  <button
+                  <button type="button"
                     onClick={() => {
                       setEditingCrosswalk(false);
                       setCrosswalkEdit(store.crosswalkMarkdown ?? "");
@@ -461,7 +461,7 @@ export function EncyclopediaPage({
                   </button>
                 </>
               ) : (
-                <button
+                <button type="button"
                   onClick={() => {
                     setCrosswalkEdit(store.crosswalkMarkdown ?? "");
                     setEditingCrosswalk(true);

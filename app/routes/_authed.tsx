@@ -92,7 +92,7 @@ function AuthedLayout() {
   async function handleSignOut() {
     const supabase = getSupabaseBrowser();
     await supabase.auth.signOut();
-    window.location.href = "/auth/login";
+    globalThis.location.href = "/auth/login";
   }
 
   return (
@@ -129,7 +129,7 @@ function AuthedLayout() {
           </div>
           <div className="flex shrink-0 items-center gap-4">
             <span className="text-xs text-text-muted">{user.email}</span>
-            <button
+            <button type="button"
               onClick={handleSignOut}
               className="rounded-md px-2 py-1 text-sm text-text-muted transition-colors hover:bg-surface-alt hover:text-text"
             >
