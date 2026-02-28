@@ -93,7 +93,7 @@ function LandingPage() {
             {
               step: "1",
               title: "Upload & Parse",
-              desc: "Paste text or upload .txt/.md files. AI converts raw compliance text into structured corpus Markdown with S.I.R.E. identity metadata.",
+              desc: "Paste text or upload .txt/.md/.json/.yaml/.pdf/.docx files. AI converts raw compliance text into structured corpus Markdown with S.I.R.E. identity metadata.",
             },
             {
               step: "2",

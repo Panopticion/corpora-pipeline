@@ -41,6 +41,45 @@ import {
   generateEncyclopediaCrosswalk as generateEncyclopediaCrosswalkFn,
 } from "@pipeline/encyclopedia";
 
+const TEXT_EXTENSIONS = new Set(["txt", "md", "markdown", "json", "yaml", "yml"]);
+
+function getExtension(fileName: string): string {
+  const idx = fileName.lastIndexOf(".");
+  if (idx < 0) return "";
+  return fileName.slice(idx + 1).toLowerCase();
+}
+
+async function extractTextFromUpload(data: {
+  fileName: string;
+  fileBase64: string;
+}): Promise<string> {
+  const ext = getExtension(data.fileName);
+  const buffer = Buffer.from(data.fileBase64, "base64");
+
+  if (TEXT_EXTENSIONS.has(ext)) {
+    return buffer.toString("utf8");
+  }
+
+  if (ext === "pdf") {
+    const { PDFParse } = await import("pdf-parse");
+    const parser = new PDFParse({ data: buffer });
+    try {
+      const parsed = await parser.getText();
+      return parsed.text ?? "";
+    } finally {
+      await parser.destroy();
+    }
+  }
+
+  if (ext === "docx") {
+    const mammoth = await import("mammoth");
+    const parsed = await mammoth.extractRawText({ buffer });
+    return parsed.value ?? "";
+  }
+
+  throw new Error("Unsupported file type. Use .txt, .md, .markdown, .json, .yaml, .yml, .pdf, or .docx");
+}
+
 function getOpenRouterKey(): string {
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) throw new Error("Missing OPENROUTER_API_KEY environment variable");
@@ -168,6 +207,22 @@ export const insertDocForParse = createServerFn({ method: "POST" })
       sourceFileName: data.sourceFileName,
       userId: user.id,
     });
+  });
+
+export const extractUploadText = createServerFn({ method: "POST" })
+  .inputValidator(
+    (data: {
+      fileName: string;
+      fileBase64: string;
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    await requireUser();
+    const text = await extractTextFromUpload(data);
+    if (!text.trim()) {
+      throw new Error("No extractable text found in uploaded file");
+    }
+    return { text };
   });
 
 export const reparseDocument = createServerFn({ method: "POST" })

@@ -1,13 +1,45 @@
 /**
  * Document upload component.
  *
- * Accepts text via paste (textarea) or file upload (.txt, .md).
+ * Accepts text via paste (textarea) or file upload
+ * (.txt, .md, .markdown, .json, .yaml, .yml, .pdf, .docx).
  * Insert + enqueue happens in one server call. Polling picks up progress.
  */
 
 import { useState, useRef } from "react";
 import { useSessionStore } from "@/lib/stores";
-import { insertDocForParse, reparseDocument } from "@/server/session-actions";
+import {
+  extractUploadText,
+  insertDocForParse,
+  reparseDocument,
+} from "@/server/session-actions";
+
+const TEXT_EXTENSIONS = new Set(["txt", "md", "markdown", "json", "yaml", "yml"]);
+const EXTRACT_EXTENSIONS = new Set(["pdf", "docx"]);
+
+function getExtension(fileName: string): string {
+  const idx = fileName.lastIndexOf(".");
+  if (idx < 0) return "";
+  return fileName.slice(idx + 1).toLowerCase();
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.onload = () => {
+      const value = reader.result;
+      if (typeof value !== "string") {
+        reject(new Error("Failed to read file"));
+        return;
+      }
+      const marker = ",";
+      const idx = value.indexOf(marker);
+      resolve(idx >= 0 ? value.slice(idx + marker.length) : value);
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 function buildDefaultUploadName(): string {
   const d = new Date();
@@ -25,6 +57,7 @@ export function DocumentUploader() {
   const [sourceText, setSourceText] = useState("");
   const [fileName, setFileName] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [extracting, setExtracting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -88,15 +121,46 @@ export function DocumentUploader() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setError(null);
     setFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result;
-      if (typeof text === "string") {
-        setSourceText(text);
-      }
-    };
-    reader.readAsText(file);
+    const ext = getExtension(file.name);
+
+    if (TEXT_EXTENSIONS.has(ext)) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const text = ev.target?.result;
+        if (typeof text === "string") {
+          setSourceText(text);
+        }
+      };
+      reader.readAsText(file);
+      return;
+    }
+
+    if (EXTRACT_EXTENSIONS.has(ext)) {
+      setExtracting(true);
+      void (async () => {
+        try {
+          const fileBase64 = await fileToBase64(file);
+          const { text } = await extractUploadText({
+            data: {
+              fileName: file.name,
+              fileBase64,
+            },
+          });
+          setSourceText(text);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Failed to extract file text");
+          setSourceText("");
+        } finally {
+          setExtracting(false);
+        }
+      })();
+      return;
+    }
+
+    setError("Unsupported file type. Use .txt, .md, .markdown, .json, .yaml, .yml, .pdf, or .docx");
+    setSourceText("");
   }
 
   return (
@@ -111,7 +175,7 @@ export function DocumentUploader() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".txt,.md,.markdown"
+            accept=".txt,.md,.markdown,.json,.yaml,.yml,.pdf,.docx"
             onChange={handleFileSelect}
             className="hidden"
           />
@@ -119,10 +183,13 @@ export function DocumentUploader() {
             onClick={() => fileInputRef.current?.click()}
             className="rounded-md border border-border bg-surface px-4 py-2 text-sm text-text-muted hover:bg-surface-alt"
           >
-            Choose file (.txt, .md)
+            Choose file (.txt, .md, .json, .yaml, .pdf, .docx)
           </button>
           {fileName && (
             <span className="ml-3 text-sm text-text-muted">{fileName}</span>
+          )}
+          {extracting && (
+            <span className="ml-3 text-xs text-text-muted">Extracting text...</span>
           )}
         </div>
 
@@ -158,10 +225,10 @@ export function DocumentUploader() {
         {/* Parse button */}
         <button
           onClick={handleParse}
-          disabled={!sourceText.trim() || submitting}
+          disabled={!sourceText.trim() || submitting || extracting}
           className="rounded-md bg-corpus-600 px-6 py-2 text-sm font-medium text-white hover:bg-corpus-700 disabled:opacity-50"
         >
-          {submitting ? "Uploading..." : "Parse Document"}
+          {extracting ? "Extracting..." : submitting ? "Uploading..." : "Parse Document"}
         </button>
       </div>
     </div>

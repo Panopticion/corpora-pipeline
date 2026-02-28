@@ -160,7 +160,8 @@ function PipelineSteps({ currentStep }: { currentStep: number }) {
 // ─── Tab helper text ────────────────────────────────────────────────────────
 
 const TAB_HELP: Record<WorkspaceTab, string> = {
-  upload: "Add compliance documents to your session. Paste text or upload .txt/.md files.",
+  upload:
+    "Add compliance documents to your session. Paste text or upload .txt/.md/.json/.yaml/.pdf/.docx files.",
   documents: "Review AI-parsed output, edit if needed, then chunk and watermark each document.",
   crosswalk: "Generate a cross-framework mapping across all your parsed documents.",
   download: "Download the complete bundle with full documents, watermarked chunks, and crosswalk.",

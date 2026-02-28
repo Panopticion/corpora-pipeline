@@ -44,7 +44,7 @@ const WORKFLOW_STEPS = [
   {
     step: "1",
     title: "Upload",
-    desc: "Add compliance documents to a session. Paste text or upload .txt/.md files — one document per regulatory framework.",
+    desc: "Add compliance documents to a session. Paste text or upload .txt/.md/.json/.yaml/.pdf/.docx files — one document per regulatory framework.",
   },
   {
     step: "2",
