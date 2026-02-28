@@ -603,6 +603,15 @@ export function GlobalStateDashboard({
     setSortDirection(next === "updatedAt" ? "desc" : "asc");
   }
 
+  function resetFilters() {
+    setPreset("all");
+    setQuery("");
+    setSessionId("all");
+    setStage("all");
+    setFramework("all");
+    setPage(1);
+  }
+
   function toggleRowSelected(documentId: string) {
     setSelectedDocumentIds((current) => {
       const next = new Set(current);
@@ -908,6 +917,19 @@ export function GlobalStateDashboard({
       </div>
 
       <div className="rounded-lg border border-border bg-surface p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Filters</p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-text-muted">{String(pagination.total)} results</p>
+            <button
+              onClick={resetFilters}
+              className="rounded-md border border-border px-2.5 py-1 text-xs text-text-muted hover:bg-surface-alt"
+            >
+              Reset filters
+            </button>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-6">
           <input
             value={query}
@@ -916,6 +938,7 @@ export function GlobalStateDashboard({
               setPage(1);
             }}
             placeholder="Search document, hash, title, framework"
+            aria-label="Search documents"
             className="rounded-md border border-border bg-white px-3 py-2 text-sm text-text outline-none focus:border-corpus-500 focus:ring-1 focus:ring-corpus-500 lg:col-span-2"
           />
           <select
@@ -924,6 +947,7 @@ export function GlobalStateDashboard({
               setSessionId(event.target.value);
               setPage(1);
             }}
+            aria-label="Filter by session"
             className="rounded-md border border-border bg-white px-3 py-2 text-sm text-text outline-none focus:border-corpus-500 focus:ring-1 focus:ring-corpus-500"
           >
             <option value="all">All sessions</option>
@@ -940,6 +964,7 @@ export function GlobalStateDashboard({
               setStage(nextStage);
               setPage(1);
             }}
+            aria-label="Filter by stage"
             className="rounded-md border border-border bg-white px-3 py-2 text-sm text-text outline-none focus:border-corpus-500 focus:ring-1 focus:ring-corpus-500"
           >
             <option value="all">All stages</option>
@@ -957,6 +982,7 @@ export function GlobalStateDashboard({
               setFramework(event.target.value);
               setPage(1);
             }}
+            aria-label="Filter by framework"
             className="rounded-md border border-border bg-white px-3 py-2 text-sm text-text outline-none focus:border-corpus-500 focus:ring-1 focus:ring-corpus-500"
           >
             <option value="all">All frameworks</option>
@@ -972,6 +998,7 @@ export function GlobalStateDashboard({
               setPageSize(Number.parseInt(event.target.value, 10));
               setPage(1);
             }}
+            aria-label="Rows per page"
             className="rounded-md border border-border bg-white px-3 py-2 text-sm text-text outline-none focus:border-corpus-500 focus:ring-1 focus:ring-corpus-500"
           >
             <option value="25">25 / page</option>
