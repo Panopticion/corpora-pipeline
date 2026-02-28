@@ -400,7 +400,10 @@ export async function addAndParseDocument(
 
   // Call OpenRouter for AI parsing
   try {
-    const systemPrompt = buildParseSystemPrompt(model, options.hints);
+    const systemPrompt = buildParseSystemPrompt(model, {
+      ...(options.hints ?? {}),
+      parsePromptProfile: options.parsePromptProfile,
+    });
     const userMessage = buildParseUserMessage(
       sourceText,
       options.sourceFileName,
@@ -501,7 +504,10 @@ export async function reparseDocument(
 
   // Call OpenRouter
   try {
-    const systemPrompt = buildParseSystemPrompt(model, options.hints);
+    const systemPrompt = buildParseSystemPrompt(model, {
+      ...(options.hints ?? {}),
+      parsePromptProfile: options.parsePromptProfile,
+    });
     const userMessage = buildParseUserMessage(
       doc.source_text as string,
       (doc.source_filename as string) ?? options.sourceFileName,

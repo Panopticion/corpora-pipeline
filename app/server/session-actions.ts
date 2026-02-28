@@ -225,7 +225,10 @@ export const extractUploadText = createServerFn({ method: "POST" })
   });
 
 export const reparseDocument = createServerFn({ method: "POST" })
-  .inputValidator((data: { documentId: string }) => data)
+  .inputValidator((data: {
+    documentId: string;
+    parsePromptProfile?: "published_standard" | "interpretation";
+  }) => data)
   .handler(async ({ data }) => {
     await requireUser();
     const service = getSupabaseService();
@@ -233,6 +236,7 @@ export const reparseDocument = createServerFn({ method: "POST" })
     // Parse inline — reparseDocumentFn sets status to "parsing" internally
     const result = await reparseDocumentFn(service, data.documentId, {
       openrouterApiKey: getOpenRouterKey(),
+      parsePromptProfile: data.parsePromptProfile,
     });
 
     return { documentId: data.documentId, model: result.model };

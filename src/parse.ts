@@ -97,7 +97,10 @@ export async function submitForParsing(
 
   // ── Call OpenRouter ───────────────────────────────────────────────────
   try {
-    const systemPrompt = buildParseSystemPrompt(model, options.hints);
+    const systemPrompt = buildParseSystemPrompt(model, {
+      ...(options.hints ?? {}),
+      parsePromptProfile: options.parsePromptProfile,
+    });
     const userMessage = buildParseUserMessage(
       sourceText,
       options.sourceFileName,

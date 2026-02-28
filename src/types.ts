@@ -223,6 +223,8 @@ export type ParseDraftStatus =
   | "rejected"
   | "failed";
 
+export type ParsePromptProfile = "published_standard" | "interpretation";
+
 /** Options for submitting a document for AI parsing. */
 export interface ParseOptions {
   /** OpenRouter API key */
@@ -243,6 +245,8 @@ export interface ParseOptions {
     sourceUrl?: string;
     sourcePublisher?: string;
   };
+  /** Prompt profile to control parse behavior for source type */
+  parsePromptProfile?: ParsePromptProfile;
   /** Skip DB write — return parsed result only */
   dryRun?: boolean;
 }
@@ -385,6 +389,8 @@ export interface SessionParseOptions {
     sourceUrl?: string;
     sourcePublisher?: string;
   };
+  /** Prompt profile to control parse behavior for source type */
+  parsePromptProfile?: ParsePromptProfile;
 }
 
 /** Result of adding and parsing a document in a session. */

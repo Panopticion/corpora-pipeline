@@ -22,6 +22,8 @@ export interface ParsePromptHints {
   sourceUrl?: string;
   /** Known publisher */
   sourcePublisher?: string;
+  /** Source profile selected by user */
+  parsePromptProfile?: "published_standard" | "interpretation";
 }
 
 /**
@@ -35,12 +37,14 @@ export function buildParseSystemPrompt(
   hints?: ParsePromptHints,
 ): string {
   const hintsBlock = buildHintsBlock(hints);
+  const profileBlock = buildProfileBlock(hints?.parsePromptProfile);
 
   return `${CONTENT}
 
 ${FORMAT}
 
 ${POLICY(model)}
+${profileBlock}
 ${hintsBlock}
 ${OUTPUT}`;
 }
@@ -309,7 +313,35 @@ Requirements:
 - Array values in frontmatter use bracket notation: \`[value1, value2]\`
 - Quoted strings in frontmatter for dates: \`"2026-01-15"\`
 - The \`sire\` block MUST be present with all four fields (subject, included, excluded, relevant)
-- Do NOT include anything outside the code block — no "Here's the parsed document:" preamble`;
+- Do NOT include any preamble such as "Here's the parsed document:"`;
+
+function buildProfileBlock(
+  profile: ParsePromptHints["parsePromptProfile"],
+): string {
+  if (profile === "published_standard") {
+    return `
+### Source Profile — PUBLISHED STANDARD
+
+The uploaded source is a published standard or primary source text.
+- Prioritize clause fidelity over stylistic rewriting.
+- Keep normative distinctions explicit (requirements vs selectable controls).
+- Preserve clause identifiers and cross-references where present.
+- Do not invent obligations not present in the source.
+- If text appears ambiguous or incomplete, represent it conservatively rather than elaborating.`;
+  }
+
+  if (profile === "interpretation") {
+    return `
+### Source Profile — INTERPRETATION / SECONDARY MATERIAL
+
+The uploaded source is interpretive or secondary commentary.
+- Preserve substantive meaning while normalizing structure for retrieval.
+- Do not present interpretations as direct quoted mandates from primary standards.
+- Prefer neutral wording for inferred guidance and avoid over-claiming authority.`;
+  }
+
+  return "";
+}
 
 // ─── Hints injection ──────────────────────────────────────────────────────
 

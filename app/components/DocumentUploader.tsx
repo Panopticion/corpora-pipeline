@@ -58,6 +58,7 @@ export function DocumentUploader() {
   const [fileName, setFileName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [extracting, setExtracting] = useState(false);
+  const [isPublishedStandard, setIsPublishedStandard] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -108,7 +109,14 @@ export function DocumentUploader() {
 
       if (!isDuplicate) {
         // Fire off parse — polling picks up result when done
-        reparseDocument({ data: { documentId } }).catch(() => {
+        reparseDocument({
+          data: {
+            documentId,
+            parsePromptProfile: isPublishedStandard
+              ? "published_standard"
+              : "interpretation",
+          },
+        }).catch(() => {
           store.updateDocument(documentId, {
             status: "failed",
             errorMessage: "Parse failed — click Re-parse to retry",
@@ -213,6 +221,21 @@ export function DocumentUploader() {
             spellCheck={false}
             className="w-full rounded-md border border-border bg-surface px-3 py-2 font-mono text-sm text-text outline-none focus:border-corpus-500 focus:ring-1 focus:ring-corpus-500"
           />
+        </div>
+
+        <div className="mb-4 rounded-md border border-border bg-surface-alt/30 p-3">
+          <label className="flex items-center gap-2 text-sm text-text">
+            <input
+              type="checkbox"
+              checked={isPublishedStandard}
+              onChange={(e) => setIsPublishedStandard(e.target.checked)}
+              className="h-4 w-4"
+            />
+            This upload is a published standard / primary source text
+          </label>
+          <p className="mt-1 text-xs text-text-muted">
+            Checked = strict fidelity prompt. Unchecked = interpretation/secondary-source prompt.
+          </p>
         </div>
 
         {/* Word count */}
