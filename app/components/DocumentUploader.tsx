@@ -111,6 +111,8 @@ export function DocumentUploader() {
           status: "parsing",
           userMarkdown: null,
           errorMessage: null,
+          auditWarningCount: 0,
+          auditWarningPreview: [],
           chunks: null,
           sortOrder,
           promotedAt: null,

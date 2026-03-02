@@ -10,6 +10,20 @@ import type {
   GlobalStateSessionSummary,
 } from "@/lib/global-state-types";
 
+function isMissingAuditTableError(error: {
+  code?: string;
+  message?: string;
+} | null | undefined): boolean {
+  if (!error) return false;
+  if (error.code === "42P01") return true;
+  const message = (error.message ?? "").toLowerCase();
+  return (
+    message.includes("could not find the table") ||
+    message.includes("schema cache") ||
+    message.includes("relation") && message.includes("does not exist")
+  );
+}
+
 function hasValidWatermarkChunks(doc: SessionDocument): boolean {
   if (doc.status !== "watermarked") return false;
   const chunks = doc.chunks_json;
@@ -263,6 +277,36 @@ export async function loadGlobalDocumentState(params: {
   const documents = (documentsRaw ?? []) as SessionDocument[];
   const nowMs = Date.now();
 
+  const warningMeta = new Map<string, { count: number; preview: string[] }>();
+  if (documents.length > 0) {
+    const documentIds = documents.map((doc) => doc.id);
+    const { data: audits, error: auditsError } = await params.service
+      .from("corpus_document_chunk_audits")
+      .select("document_id, warnings, omission_detected")
+      .in("document_id", documentIds)
+      .eq("omission_detected", true)
+      .order("sequence", { ascending: true });
+
+    if (auditsError && !isMissingAuditTableError(auditsError)) {
+      throw new Error(`Failed to load global chunk audit warnings: ${auditsError.message}`);
+    }
+
+    for (const audit of (audits ?? []) as Array<{
+      document_id: string;
+      warnings: string[] | null;
+      omission_detected: boolean;
+    }>) {
+      if (!audit.omission_detected) continue;
+      const current = warningMeta.get(audit.document_id) ?? { count: 0, preview: [] };
+      const warnings = (audit.warnings ?? []).filter(Boolean);
+      const warningCount = warnings.length > 0 ? warnings.length : 1;
+      warningMeta.set(audit.document_id, {
+        count: current.count + warningCount,
+        preview: [...current.preview, ...warnings].slice(0, 3),
+      });
+    }
+  }
+
   const rows = documents
     .map((doc): GlobalStateDocumentRow | null => {
       const session = sessionById.get(doc.session_id);
@@ -275,6 +319,7 @@ export async function loadGlobalDocumentState(params: {
       const chunkCount = doc.chunks_json?.length ?? 0;
       const { isStale, staleHours } = deriveStaleness(doc, nowMs);
       const attentionReason = deriveAttentionReason(doc, stage, isStale, staleHours);
+      const auditWarnings = warningMeta.get(doc.id) ?? { count: 0, preview: [] };
 
       return {
         documentId: doc.id,
@@ -290,6 +335,8 @@ export async function loadGlobalDocumentState(params: {
         chunkCount,
         promoted: Boolean(doc.promoted_at),
         watermarkValid,
+        auditWarningCount: auditWarnings.count,
+        auditWarningPreview: auditWarnings.preview,
         updatedAt: doc.updated_at,
         stale: isStale,
         attentionReason,

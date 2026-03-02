@@ -66,13 +66,17 @@ async function handleParseDocument(
   job: Job,
 ): Promise<Record<string, unknown>> {
   const client = getClient();
-  const { documentId } = job.payload as { documentId: string };
+  const { documentId, parsePromptProfile } = job.payload as {
+    documentId: string;
+    parsePromptProfile?: "published_standard" | "interpretation";
+  };
 
   console.log(`  [parse] documentId=${documentId}`);
 
   // Parse only — user reviews, then triggers chunk/watermark manually
   const result = await reparseDocument(client, documentId, {
     openrouterApiKey: getOpenRouterKey(),
+    parsePromptProfile,
   });
 
   return {
@@ -80,6 +84,10 @@ async function handleParseDocument(
     model: result.model,
     inputTokens: result.inputTokens,
     outputTokens: result.outputTokens,
+    totalSourceChunks: result.totalSourceChunks,
+    omissionChunkCount: result.omissionChunkCount,
+    recoveredChunkCount: result.recoveredChunkCount,
+    auditWarnings: result.auditWarnings,
   };
 }
 

@@ -25,6 +25,10 @@ import {
   buildParseUserMessage,
 } from "./prompts/parse-document";
 import {
+  buildChunkCleanseSystemPrompt,
+  buildChunkCleanseUserPrompt,
+} from "./prompts/cleanse-source-chunk";
+import {
   buildCrosswalkSystemPrompt,
   buildCrosswalkUserMessage,
 } from "./prompts/crosswalk-document";
@@ -40,6 +44,11 @@ import {
   verifyChunkWatermark,
 } from "./watermark";
 import { PARSE_MODEL_DEFAULT } from "./constants";
+import {
+  auditAndRecoverChunk,
+  splitSourceTextIntoChunks,
+  type ChunkAuditResult,
+} from "./source-chunk-audit";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -119,6 +128,241 @@ function selectValidCorpusMarkdown(raw: string): {
     markdown: null,
     parseError: lastError ?? "Unknown parse validation error",
     fallback,
+  };
+}
+
+const CHUNK_STRATEGY = "hybrid_paragraph_cap";
+
+interface ChunkAuditPipelineResult {
+  recoveredSourceText: string;
+  sourceChunkCount: number;
+  omissionChunkCount: number;
+  recoveredChunkCount: number;
+  auditWarnings: string[];
+  inputTokens: number;
+  outputTokens: number;
+}
+
+function isMissingAuditTableError(error: {
+  code?: string;
+  message?: string;
+} | null | undefined): boolean {
+  if (!error) return false;
+  if (error.code === "42P01") return true;
+  const message = (error.message ?? "").toLowerCase();
+  return (
+    message.includes("could not find the table") ||
+    message.includes("schema cache") ||
+    message.includes("relation") && message.includes("does not exist")
+  );
+}
+
+async function persistSourceChunks(
+  client: SupabaseClient,
+  documentId: string,
+  chunks: ReturnType<typeof splitSourceTextIntoChunks>,
+): Promise<void> {
+  const { error: deleteError } = await client
+    .from("corpus_document_source_chunks")
+    .delete()
+    .eq("document_id", documentId);
+
+  if (deleteError) {
+    if (isMissingAuditTableError(deleteError)) {
+      console.warn("[corpus-pipeline] source chunk table missing; skipping persistence");
+      return;
+    }
+    throw new Error(`Failed clearing source chunks: ${deleteError.message}`);
+  }
+
+  if (chunks.length === 0) return;
+
+  const { error: insertError } = await client
+    .from("corpus_document_source_chunks")
+    .insert(
+      chunks.map((chunk) => ({
+        document_id: documentId,
+        sequence: chunk.sequence,
+        source_text: chunk.sourceText,
+        source_hash: chunk.sourceHash,
+        chunk_strategy: CHUNK_STRATEGY,
+      })),
+    );
+
+  if (insertError) {
+    if (isMissingAuditTableError(insertError)) {
+      console.warn("[corpus-pipeline] source chunk table missing; skipping persistence");
+      return;
+    }
+    throw new Error(`Failed storing source chunks: ${insertError.message}`);
+  }
+}
+
+async function persistChunkAudits(
+  client: SupabaseClient,
+  documentId: string,
+  audits: ChunkAuditResult[],
+): Promise<void> {
+  const { error: deleteError } = await client
+    .from("corpus_document_chunk_audits")
+    .delete()
+    .eq("document_id", documentId);
+
+  if (deleteError) {
+    if (isMissingAuditTableError(deleteError)) {
+      console.warn("[corpus-pipeline] chunk audit table missing; skipping persistence");
+      return;
+    }
+    throw new Error(`Failed clearing chunk audits: ${deleteError.message}`);
+  }
+
+  if (audits.length === 0) return;
+
+  const { error: insertError } = await client
+    .from("corpus_document_chunk_audits")
+    .insert(
+      audits.map((audit) => ({
+        document_id: documentId,
+        sequence: audit.sequence,
+        source_hash: audit.sourceHash,
+        ai_hash: audit.aiHash,
+        coverage_ratio: audit.coverageRatio,
+        omission_detected: audit.omissionDetected,
+        recovered_from_source: audit.recoveredFromSource,
+        source_text: audit.sourceText,
+        ai_text: audit.aiText,
+        recovered_text: audit.recoveredText,
+        warnings: audit.warnings,
+      })),
+    );
+
+  if (insertError) {
+    if (isMissingAuditTableError(insertError)) {
+      console.warn("[corpus-pipeline] chunk audit table missing; skipping persistence");
+      return;
+    }
+    throw new Error(`Failed storing chunk audits: ${insertError.message}`);
+  }
+}
+
+async function runChunkAuditPipeline(
+  client: SupabaseClient,
+  documentId: string,
+  sourceText: string,
+  options: SessionParseOptions,
+  model: string,
+): Promise<ChunkAuditPipelineResult> {
+  const sourceChunks = splitSourceTextIntoChunks(sourceText);
+  await persistSourceChunks(client, documentId, sourceChunks);
+
+  const cleanseSystemPrompt = buildChunkCleanseSystemPrompt();
+  const audits: ChunkAuditResult[] = [];
+  let cleanseInputTokens = 0;
+  let cleanseOutputTokens = 0;
+
+  for (const chunk of sourceChunks) {
+    const cleanseResult = await callOpenRouter(
+      [
+        { role: "system", content: cleanseSystemPrompt },
+        {
+          role: "user",
+          content: buildChunkCleanseUserPrompt(chunk.sourceText, chunk.sequence),
+        },
+      ],
+      {
+        apiKey: options.openrouterApiKey,
+        model,
+        temperature: 0,
+        maxTokens: 8_192,
+      },
+    );
+
+    cleanseInputTokens += cleanseResult.inputTokens;
+    cleanseOutputTokens += cleanseResult.outputTokens;
+
+    const cleanseText = extractMarkdown(cleanseResult.content);
+    audits.push(auditAndRecoverChunk(chunk, cleanseText));
+  }
+
+  await persistChunkAudits(client, documentId, audits);
+
+  return {
+    recoveredSourceText: audits.map((audit) => audit.recoveredText).join("\n\n"),
+    sourceChunkCount: sourceChunks.length,
+    omissionChunkCount: audits.filter((audit) => audit.omissionDetected).length,
+    recoveredChunkCount: audits.filter((audit) => audit.recoveredFromSource).length,
+    auditWarnings: audits.flatMap((audit) =>
+      audit.warnings.map((warning) => `chunk_${String(audit.sequence)}:${warning}`),
+    ),
+    inputTokens: cleanseInputTokens,
+    outputTokens: cleanseOutputTokens,
+  };
+}
+
+async function parseDocumentWithAudit(
+  client: SupabaseClient,
+  documentId: string,
+  sourceText: string,
+  sourceFileName: string | undefined,
+  options: SessionParseOptions,
+  model: string,
+): Promise<SessionParseResult> {
+  const chunkAudit = await runChunkAuditPipeline(
+    client,
+    documentId,
+    sourceText,
+    options,
+    model,
+  );
+
+  const systemPrompt = buildParseSystemPrompt(model, {
+    ...(options.hints ?? {}),
+    parsePromptProfile: options.parsePromptProfile,
+  });
+  const userMessage = buildParseUserMessage(
+    chunkAudit.recoveredSourceText,
+    sourceFileName,
+  );
+
+  const parseResult = await callOpenRouter(
+    [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userMessage },
+    ],
+    {
+      apiKey: options.openrouterApiKey,
+      model,
+    },
+  );
+
+  const selected = selectValidCorpusMarkdown(parseResult.content);
+  if (!selected.markdown) {
+    const msg = selected.parseError ?? "Unknown parse validation error";
+
+    await client
+      .from("corpus_session_documents")
+      .update({
+        status: "failed",
+        error_message: `AI output failed validation: ${msg}`,
+        parsed_markdown: selected.fallback,
+        parse_tokens_in: parseResult.inputTokens + chunkAudit.inputTokens,
+        parse_tokens_out: parseResult.outputTokens + chunkAudit.outputTokens,
+      })
+      .eq("id", documentId);
+
+    throw new Error(`AI produced invalid corpus Markdown: ${msg}`);
+  }
+
+  return {
+    documentId,
+    parsedMarkdown: selected.markdown,
+    model: parseResult.model,
+    inputTokens: parseResult.inputTokens + chunkAudit.inputTokens,
+    outputTokens: parseResult.outputTokens + chunkAudit.outputTokens,
+    totalSourceChunks: chunkAudit.sourceChunkCount,
+    omissionChunkCount: chunkAudit.omissionChunkCount,
+    recoveredChunkCount: chunkAudit.recoveredChunkCount,
+    auditWarnings: chunkAudit.auditWarnings,
   };
 }
 
@@ -265,7 +509,51 @@ export async function getSessionDocuments(
     throw new Error(`Failed to get session documents: ${error.message}`);
   }
 
-  return (data ?? []) as SessionDocument[];
+  const docs = (data ?? []) as SessionDocument[];
+  if (docs.length === 0) {
+    return docs;
+  }
+
+  const docIds = docs.map((doc) => doc.id);
+  const warningMeta = new Map<string, { count: number; preview: string[] }>();
+
+  const { data: auditRows, error: auditError } = await client
+    .from("corpus_document_chunk_audits")
+    .select("document_id, warnings, omission_detected")
+    .in("document_id", docIds)
+    .eq("omission_detected", true)
+    .order("sequence", { ascending: true });
+
+  if (auditError && !isMissingAuditTableError(auditError)) {
+    throw new Error(`Failed to load chunk audit warnings: ${auditError.message}`);
+  }
+
+  for (const row of (auditRows ?? []) as Array<{
+    document_id: string;
+    warnings: string[] | null;
+    omission_detected: boolean;
+  }>) {
+    if (!row.omission_detected) continue;
+
+    const existing = warningMeta.get(row.document_id) ?? { count: 0, preview: [] };
+    const rowWarnings = (row.warnings ?? []).filter(Boolean);
+    const warningCount = rowWarnings.length > 0 ? rowWarnings.length : 1;
+    const preview = [...existing.preview, ...rowWarnings].slice(0, 3);
+
+    warningMeta.set(row.document_id, {
+      count: existing.count + warningCount,
+      preview,
+    });
+  }
+
+  return docs.map((doc) => {
+    const meta = warningMeta.get(doc.id);
+    return {
+      ...doc,
+      audit_warning_count: meta?.count ?? 0,
+      audit_warning_preview: meta?.preview ?? [],
+    };
+  });
 }
 
 /**
@@ -402,68 +690,29 @@ export async function addAndParseDocument(
 
   const documentId = data.id as string;
 
-  // Call OpenRouter for AI parsing
+  // Parse with chunk-first audit + recovery pipeline
   try {
-    const systemPrompt = buildParseSystemPrompt(model, {
-      ...(options.hints ?? {}),
-      parsePromptProfile: options.parsePromptProfile,
-    });
-    const userMessage = buildParseUserMessage(
+    const parse = await parseDocumentWithAudit(
+      client,
+      documentId,
       sourceText,
       options.sourceFileName,
+      options,
+      model,
     );
-
-    const result = await callOpenRouter(
-      [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage },
-      ],
-      {
-        apiKey: options.openrouterApiKey,
-        model,
-      },
-    );
-
-    const selected = selectValidCorpusMarkdown(result.content);
-    if (!selected.markdown) {
-      const msg = selected.parseError ?? "Unknown parse validation error";
-
-      await client
-        .from("corpus_session_documents")
-        .update({
-          status: "failed",
-          error_message: `AI output failed validation: ${msg}`,
-          parsed_markdown: selected.fallback,
-          parse_tokens_in: result.inputTokens,
-          parse_tokens_out: result.outputTokens,
-        })
-        .eq("id", documentId);
-
-      throw new Error(
-        `AI produced invalid corpus Markdown: ${msg}\n\nRaw output saved to document ${documentId} for inspection.`,
-      );
-    }
-
-    const parsedMarkdown = selected.markdown;
 
     // Update document with parsed result
     await client
       .from("corpus_session_documents")
       .update({
-        parsed_markdown: parsedMarkdown,
-        parse_tokens_in: result.inputTokens,
-        parse_tokens_out: result.outputTokens,
+        parsed_markdown: parse.parsedMarkdown,
+        parse_tokens_in: parse.inputTokens,
+        parse_tokens_out: parse.outputTokens,
         status: "parsed",
       })
       .eq("id", documentId);
 
-    return {
-      documentId,
-      parsedMarkdown,
-      model: result.model,
-      inputTokens: result.inputTokens,
-      outputTokens: result.outputTokens,
-    };
+    return parse;
   } catch (err) {
     // Mark document as failed
     const msg = err instanceof Error ? err.message : String(err);
@@ -506,67 +755,30 @@ export async function reparseDocument(
     .update({ status: "parsing", error_message: null, parse_model: model })
     .eq("id", documentId);
 
-  // Call OpenRouter
+  // Parse with chunk-first audit + recovery pipeline
   try {
-    const systemPrompt = buildParseSystemPrompt(model, {
-      ...(options.hints ?? {}),
-      parsePromptProfile: options.parsePromptProfile,
-    });
-    const userMessage = buildParseUserMessage(
+    const parse = await parseDocumentWithAudit(
+      client,
+      documentId,
       doc.source_text as string,
       (doc.source_filename as string) ?? options.sourceFileName,
+      options,
+      model,
     );
-
-    const result = await callOpenRouter(
-      [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage },
-      ],
-      {
-        apiKey: options.openrouterApiKey,
-        model,
-      },
-    );
-
-    const selected = selectValidCorpusMarkdown(result.content);
-    if (!selected.markdown) {
-      const msg = selected.parseError ?? "Unknown parse validation error";
-
-      await client
-        .from("corpus_session_documents")
-        .update({
-          status: "failed",
-          error_message: `AI output failed validation: ${msg}`,
-          parsed_markdown: selected.fallback,
-          parse_tokens_in: result.inputTokens,
-          parse_tokens_out: result.outputTokens,
-        })
-        .eq("id", documentId);
-
-      throw new Error(`AI produced invalid corpus Markdown: ${msg}`);
-    }
-
-    const parsedMarkdown = selected.markdown;
 
     // Update with result
     await client
       .from("corpus_session_documents")
       .update({
-        parsed_markdown: parsedMarkdown,
-        parse_tokens_in: result.inputTokens,
-        parse_tokens_out: result.outputTokens,
+        parsed_markdown: parse.parsedMarkdown,
+        parse_tokens_in: parse.inputTokens,
+        parse_tokens_out: parse.outputTokens,
         status: "parsed",
         user_markdown: null, // Clear previous edits
       })
       .eq("id", documentId);
 
-    return {
-      documentId,
-      parsedMarkdown,
-      model: result.model,
-      inputTokens: result.inputTokens,
-      outputTokens: result.outputTokens,
-    };
+    return parse;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     await client

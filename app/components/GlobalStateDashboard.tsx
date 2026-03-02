@@ -1546,6 +1546,17 @@ export function GlobalStateDashboard({
                           ) : (
                             <p className="text-xs text-text-muted">None</p>
                           )}
+                          {row.auditWarningCount > 0 && (
+                            <p className="mt-1 text-xs text-warning">
+                              Recovery applied on {row.auditWarningCount} chunk
+                              {row.auditWarningCount === 1 ? "" : "s"}
+                            </p>
+                          )}
+                          {row.auditWarningPreview.length > 0 && (
+                            <p className="mt-1 text-xs text-text-muted">
+                              {row.auditWarningPreview.join(", ")}
+                            </p>
+                          )}
                           {row.errorMessage && row.status !== "failed" && (
                             <p className="mt-1 text-xs text-text-muted">{row.errorMessage}</p>
                           )}

@@ -46,6 +46,8 @@ interface Props {
     status: string;
     user_markdown: string | null;
     error_message: string | null;
+    audit_warning_count?: number | null;
+    audit_warning_preview?: string[] | null;
     chunks_json: Array<{
       sequence: number;
       section_title: string;
@@ -90,6 +92,8 @@ function mapServerDocs(documents: Props["documents"]): SessionDoc[] {
     status: d.status as SessionDoc["status"],
     userMarkdown: d.user_markdown,
     errorMessage: d.error_message,
+    auditWarningCount: d.audit_warning_count ?? 0,
+    auditWarningPreview: d.audit_warning_preview ?? [],
     chunks: d.chunks_json
       ? d.chunks_json.map((c) => ({
           sequence: c.sequence,

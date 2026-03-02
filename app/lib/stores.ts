@@ -47,6 +47,8 @@ export interface SessionDoc {
   status: DocumentStatus;
   userMarkdown: string | null;
   errorMessage: string | null;
+  auditWarningCount: number;
+  auditWarningPreview: string[];
   chunks: ChunkData[] | null;
   sortOrder: number;
   promotedAt: string | null;

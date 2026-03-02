@@ -58,6 +58,8 @@ export type GlobalStateDocumentRow = {
   chunkCount: number;
   promoted: boolean;
   watermarkValid: boolean;
+  auditWarningCount: number;
+  auditWarningPreview: string[];
   updatedAt: string;
   stale: boolean;
   attentionReason: string | null;
@@ -133,6 +135,7 @@ export type GlobalStateActionResponse = {
   documentId: string;
   action: GlobalStateActionKind;
   status: "started" | "completed";
+  jobId?: number;
   model?: string;
   chunkCount?: number;
 };

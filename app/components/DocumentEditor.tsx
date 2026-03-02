@@ -463,6 +463,11 @@ function DocumentCard({
           <p className="text-xs text-text-muted">{corpusId}</p>
         </div>
         <div className="flex items-center gap-3">
+          {doc.auditWarningCount > 0 && (
+            <span className="rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
+              {doc.auditWarningCount} audit warning{doc.auditWarningCount === 1 ? "" : "s"}
+            </span>
+          )}
           {doc.chunks && (
             <span className="text-xs text-text-muted">
               {doc.chunks.length} chunks
@@ -500,6 +505,11 @@ function DocumentCard({
         {doc.errorMessage && !isActive && (
           <p className="mt-1 text-xs text-error truncate">{doc.errorMessage}</p>
         )}
+        {!isActive && doc.auditWarningCount > 0 && (
+          <p className="mt-1 text-xs text-warning truncate">
+            Recovery applied on {doc.auditWarningCount} chunk{doc.auditWarningCount === 1 ? "" : "s"}.
+          </p>
+        )}
       </div>
 
       {/* Expanded content */}
@@ -526,6 +536,22 @@ function DocumentCard({
           {doc.errorMessage && (
             <div className="mb-4 rounded-md border border-error/20 bg-error/5 p-3 text-sm text-error">
               {doc.errorMessage}
+            </div>
+          )}
+
+          {doc.auditWarningCount > 0 && (
+            <div className="mb-4 rounded-md border border-warning/20 bg-warning/5 p-3 text-sm text-warning">
+              <p>
+                Chunk-audit recovery was applied on {doc.auditWarningCount} chunk
+                {doc.auditWarningCount === 1 ? "" : "s"}.
+              </p>
+              {doc.auditWarningPreview.length > 0 && (
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs">
+                  {doc.auditWarningPreview.map((warning, index) => (
+                    <li key={`${warning}-${String(index)}`}>{warning}</li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
 

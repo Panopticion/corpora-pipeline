@@ -32,9 +32,9 @@ import {
 } from "@pipeline/sessions";
 import type { CorpusSession, SessionDocument } from "@pipeline/types";
 import {
-  reparseDocument as reparseDocumentFn,
   generateCrosswalk as generateCrosswalkFn,
 } from "@pipeline/sessions";
+import { enqueueJob } from "@pipeline/job-queue";
 import { extractPdfText, parsePdfExtractorMode } from "@pipeline/pdf-extract";
 import { cleanExtractedPdfTextWithTelemetry } from "@pipeline/pdf-cleanup";
 import {
@@ -309,15 +309,27 @@ export const runGlobalStateAction = createServerFn({ method: "POST" })
       await requireOwnedDocument(service, data.documentId, user.id);
 
       if (data.action === "parse") {
-        const result = await reparseDocumentFn(service, data.documentId, {
-          openrouterApiKey: getOpenRouterKey(),
+        const model = process.env.PARSE_MODEL_DEFAULT;
+
+        await service
+          .from("corpus_session_documents")
+          .update({
+            status: "parsing",
+            error_message: null,
+            ...(model ? { parse_model: model } : {}),
+          })
+          .eq("id", data.documentId);
+
+        const jobId = await enqueueJob(service, "parse_document", {
+          documentId: data.documentId,
           parsePromptProfile: data.parsePromptProfile,
         });
+
         return {
           documentId: data.documentId,
           action: "parse",
           status: "started",
-          model: result.model,
+          jobId,
         };
       }
 
@@ -491,13 +503,23 @@ export const reparseDocument = createServerFn({ method: "POST" })
 
     await requireOwnedDocument(service, data.documentId, user.id);
 
-    // Parse inline — reparseDocumentFn sets status to "parsing" internally
-    const result = await reparseDocumentFn(service, data.documentId, {
-      openrouterApiKey: getOpenRouterKey(),
+    const model = process.env.PARSE_MODEL_DEFAULT;
+
+    await service
+      .from("corpus_session_documents")
+      .update({
+        status: "parsing",
+        error_message: null,
+        ...(model ? { parse_model: model } : {}),
+      })
+      .eq("id", data.documentId);
+
+    const jobId = await enqueueJob(service, "parse_document", {
+      documentId: data.documentId,
       parsePromptProfile: data.parsePromptProfile,
     });
 
-    return { documentId: data.documentId, model: result.model };
+    return { documentId: data.documentId, jobId };
   });
 
 export const reparseDocumentResult = createServerFn({ method: "POST" })
@@ -510,11 +532,24 @@ export const reparseDocumentResult = createServerFn({ method: "POST" })
       const user = await requireUser();
       const service = getSupabaseService();
       await requireOwnedDocument(service, data.documentId, user.id);
-      const result = await reparseDocumentFn(service, data.documentId, {
-        openrouterApiKey: getOpenRouterKey(),
+
+      const model = process.env.PARSE_MODEL_DEFAULT;
+
+      await service
+        .from("corpus_session_documents")
+        .update({
+          status: "parsing",
+          error_message: null,
+          ...(model ? { parse_model: model } : {}),
+        })
+        .eq("id", data.documentId);
+
+      const jobId = await enqueueJob(service, "parse_document", {
+        documentId: data.documentId,
         parsePromptProfile: data.parsePromptProfile,
       });
-      return { documentId: data.documentId, model: result.model };
+
+      return { documentId: data.documentId, jobId };
     }),
   );
 

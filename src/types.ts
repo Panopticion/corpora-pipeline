@@ -329,6 +329,10 @@ export interface SessionDocument {
   error_message: string | null;
   /** Chunk objects from chunkCorpus(). Updated with watermarks after watermark stage. */
   chunks_json: CorpusChunkRaw[] | null;
+  /** Count of omission/recovery warnings from chunk-audit stage. */
+  audit_warning_count?: number | null;
+  /** Short warning preview from chunk-audit stage. */
+  audit_warning_preview?: string[] | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -360,6 +364,26 @@ export interface SessionQualitySnapshotPayload {
   canGenerateCrosswalk: boolean;
   sessionStatus: SessionStatus;
   crosswalkPresent: boolean;
+}
+
+export interface SourceChunkRecord {
+  sequence: number;
+  source_text: string;
+  source_hash: string;
+  chunk_strategy: string;
+}
+
+export interface ChunkAuditRecord {
+  sequence: number;
+  source_hash: string;
+  ai_hash: string;
+  coverage_ratio: number;
+  omission_detected: boolean;
+  recovered_from_source: boolean;
+  source_text: string;
+  ai_text: string;
+  recovered_text: string;
+  warnings: string[];
 }
 
 /** Options for creating a new parse session. */
@@ -400,6 +424,10 @@ export interface SessionParseResult {
   model: string;
   inputTokens: number;
   outputTokens: number;
+  totalSourceChunks: number;
+  omissionChunkCount: number;
+  recoveredChunkCount: number;
+  auditWarnings: string[];
 }
 
 /** Options for generating a crosswalk across session documents. */
