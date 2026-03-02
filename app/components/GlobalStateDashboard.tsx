@@ -136,9 +136,22 @@ function parseStepLabel(step: string | null | undefined): string {
   if (step === "chunk_audit") return "Cleaning source chunks";
   if (step === "parse") return "Generating markdown";
   if (step === "persist") return "Saving parsed output";
-  if (step === "completed") return "Completed";
+  if (step === "completed") return "Saving parsed output";
   if (step === "cancelled") return "Cancelled";
-  return "Waiting";
+  return "Queued";
+}
+
+function parseTimelineMessage(parseJob: DashboardRow["parseJob"]): string {
+  if (!parseJob) return "Queued for worker";
+
+  const message = parseJob.message?.trim();
+  if (message) return message;
+
+  if (parseJob.status === "pending" && parseJob.retryCount > 1) {
+    return "Retry queued for worker";
+  }
+
+  return "Queued for worker";
 }
 
 function actionLabel(action: RowAction, busy: boolean): string {
@@ -1620,9 +1633,7 @@ export function GlobalStateDashboard({
                               <p className="font-medium text-text">
                                 {parseStepLabel(row.parseJob?.step)}
                               </p>
-                              {row.parseJob?.message && (
-                                <p className="text-text-muted">{row.parseJob.message}</p>
-                              )}
+                              <p className="text-text-muted">{parseTimelineMessage(row.parseJob)}</p>
                               {row.parseJob && (
                                 <p className="text-text-muted">
                                   attempt {String(row.parseJob.retryCount)}/{String(row.parseJob.maxRetries)}
@@ -1663,7 +1674,7 @@ export function GlobalStateDashboard({
                                   </span>
                                 )}
                               </p>
-                              {row.parseJob.message && <p>{row.parseJob.message}</p>}
+                              <p>{parseTimelineMessage(row.parseJob)}</p>
                             </div>
                           )}
                           {row.errorMessage && row.status !== "failed" && (
