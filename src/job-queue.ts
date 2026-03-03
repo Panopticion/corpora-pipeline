@@ -156,6 +156,8 @@ export async function updateJobProgress(
     message: string;
     details?: Record<string, unknown>;
   },
+  /** Extend the lease by this many seconds (default 600). */
+  leaseSeconds = 600,
 ): Promise<void> {
   const result = {
     step: progress.step,
@@ -166,7 +168,10 @@ export async function updateJobProgress(
 
   const { data, error } = await client
     .from("corpus_jobs")
-    .update({ result })
+    .update({
+      result,
+      visible_at: new Date(Date.now() + leaseSeconds * 1000).toISOString(),
+    })
     .eq("id", jobId)
     .eq("status", "in_progress")
     .select("id")
