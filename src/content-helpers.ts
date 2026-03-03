@@ -368,6 +368,7 @@ export function parseCorpusContent(rawMarkdown: string): Corpus {
     language: data.language ? String(data.language) : undefined,
     fact_check: data.fact_check as Corpus["fact_check"],
     sire: data.sire as Corpus["sire"],
+    license: data.license as Corpus["license"],
     content: body,
     filePath: "(inline content)",
   };

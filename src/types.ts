@@ -28,6 +28,16 @@ export interface CorpusSire {
   relevant: string[];
 }
 
+/** License and output policy metadata for corpus source material. */
+export interface CorpusLicense {
+  /** License status enum: licensed | customer_provided | public_domain | synthetic | unknown */
+  status: 'licensed' | 'customer_provided' | 'public_domain' | 'synthetic' | 'unknown';
+  /** Human-readable constraint description (e.g. "ISO/IEC copyright. Reproduction restricted.") */
+  notes?: string;
+  /** Deterministic output instruction for the Prompt Compiler. */
+  output_policy: 'citation_only' | 'full_text_permitted' | 'unrestricted' | 'attributed_reproduction' | 'restricted_pending';
+}
+
 /** Corpus document shape. */
 export interface Corpus {
   corpus_id: string;
@@ -45,6 +55,8 @@ export interface Corpus {
   fact_check?: CorpusFactCheck;
   /** S.I.R.E. identity-first retrieval metadata. Optional — corpora without it bypass gating. */
   sire?: CorpusSire;
+  /** License and output policy metadata. Optional — corpora without it default to unrestricted. */
+  license?: CorpusLicense;
   content: string;
   filePath: string;
 }
