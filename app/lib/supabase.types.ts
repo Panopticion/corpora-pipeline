@@ -1100,6 +1100,7 @@ export type Database = {
           sort_order: number
           source_filename: string
           source_hash: string
+          source_storage_path: string | null
           source_text: string
           status: string
           updated_at: string
@@ -1121,6 +1122,7 @@ export type Database = {
           sort_order?: number
           source_filename: string
           source_hash: string
+          source_storage_path?: string | null
           source_text: string
           status?: string
           updated_at?: string
@@ -1142,6 +1144,7 @@ export type Database = {
           sort_order?: number
           source_filename?: string
           source_hash?: string
+          source_storage_path?: string | null
           source_text?: string
           status?: string
           updated_at?: string

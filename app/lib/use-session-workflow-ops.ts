@@ -49,7 +49,7 @@ function unwrapServerResult<T>(result: ServerResult<T>): T {
 }
 
 export function useSessionWorkflowOps() {
-  const extractUploadText = useCallback(async (data: { fileName: string; fileBase64: string }) => {
+  const extractUploadText = useCallback(async (data: { fileName: string; fileBase64: string; sessionId: string }) => {
     const result = await extractUploadTextResult({ data });
     return unwrapServerResult(result);
   }, []);
@@ -63,6 +63,7 @@ export function useSessionWorkflowOps() {
     sessionId: string;
     sourceText: string;
     sourceFileName?: string;
+    sourceStoragePath?: string;
   }) => {
     const result = await insertDocForParseResult({ data });
     return unwrapServerResult(result);

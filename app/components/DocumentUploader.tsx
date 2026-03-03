@@ -80,6 +80,7 @@ export function DocumentUploader() {
   const [isPublishedStandard, setIsPublishedStandard] = useState(true);
   const [isFirecrawlPrepped, setIsFirecrawlPrepped] = useState(false);
   const [sourceUrl, setSourceUrl] = useState("");
+  const [storagePath, setStoragePath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastOutcome, setLastOutcome] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -98,6 +99,7 @@ export function DocumentUploader() {
         sessionId: store.sessionId,
         sourceText,
         sourceFileName: resolvedSourceFileName,
+        sourceStoragePath: storagePath ?? undefined,
       });
 
       if (!isDuplicate) {
@@ -120,6 +122,7 @@ export function DocumentUploader() {
           chunks: null,
           sortOrder,
           promotedAt: null,
+          sourceStoragePath: null,
         });
       }
 
@@ -132,6 +135,7 @@ export function DocumentUploader() {
       setFileName("");
       setIsFirecrawlPrepped(false);
       setSourceUrl("");
+      setStoragePath(null);
 
       if (!isDuplicate) {
         // Fire off parse — polling picks up result when done
@@ -194,18 +198,28 @@ export function DocumentUploader() {
     }
 
     if (EXTRACT_EXTENSIONS.has(ext)) {
+      if (!store.sessionId) {
+        setError("No active session — create or select a session first");
+        return;
+      }
       setExtracting(true);
       void (async () => {
         try {
           const fileBase64 = await fileToBase64(file);
-          const { text } = await extractUploadText({
+          const result = await extractUploadText({
             fileName: file.name,
             fileBase64,
+            sessionId: store.sessionId!,
           });
-          setSourceText(text);
+          setSourceText(result.text);
+          setStoragePath(result.storagePath ?? null);
+          if (result.isFirecrawlPrepped) {
+            setIsFirecrawlPrepped(true);
+          }
         } catch (err) {
           setError(err instanceof Error ? err.message : "Failed to extract file text");
           setSourceText("");
+          setStoragePath(null);
         } finally {
           setExtracting(false);
         }
@@ -314,7 +328,7 @@ export function DocumentUploader() {
             <span className="text-sm text-text-muted">{fileName}</span>
           )}
           {extracting && (
-            <span className="text-xs text-text-muted">Extracting text...</span>
+            <span className="text-xs text-text-muted">Uploading & extracting via Firecrawl...</span>
           )}
         </div>
 

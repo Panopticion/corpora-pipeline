@@ -62,6 +62,7 @@ export interface SessionDoc {
   chunks: ChunkData[] | null;
   sortOrder: number;
   promotedAt: string | null;
+  sourceStoragePath: string | null;
 }
 
 export type WorkspaceTab = "upload" | "documents" | "crosswalk" | "download";

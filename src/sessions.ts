@@ -940,6 +940,7 @@ export async function insertDocumentForParse(
     userId?: string;
     organizationId?: string;
     model?: string;
+    sourceStoragePath?: string;
   },
 ): Promise<{
   documentId: string;
@@ -968,6 +969,7 @@ export async function insertDocumentForParse(
       organization_id: options.organizationId ?? null,
       created_by: options.userId ?? null,
       sort_order: count ?? 0,
+      source_storage_path: options.sourceStoragePath ?? null,
     })
     .select("id")
     .single();

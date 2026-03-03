@@ -362,6 +362,8 @@ export interface SessionDocument {
   created_by: string | null;
   /** Set when document is promoted to the Encyclopedia. */
   promoted_at: string | null;
+  /** Supabase Storage path to the original uploaded file. NULL for text-pasted documents. */
+  source_storage_path: string | null;
 }
 
 export interface SessionQualityMetrics {

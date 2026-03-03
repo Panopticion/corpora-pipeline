@@ -69,6 +69,7 @@ interface Props {
     }> | null;
     sort_order: number;
     promoted_at: string | null;
+    source_storage_path?: string | null;
   }>;
 }
 
@@ -129,6 +130,7 @@ function mapServerDocs(documents: Props["documents"]): SessionDoc[] {
       : null,
     sortOrder: d.sort_order,
     promotedAt: d.promoted_at,
+    sourceStoragePath: d.source_storage_path ?? null,
   }));
 }
 

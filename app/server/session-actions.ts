@@ -35,8 +35,6 @@ import {
   generateCrosswalk as generateCrosswalkFn,
 } from "@pipeline/sessions";
 import { enqueueJob } from "@pipeline/job-queue";
-import { extractPdfText, parsePdfExtractorMode } from "@pipeline/pdf-extract";
-import { cleanExtractedPdfTextWithTelemetry } from "@pipeline/pdf-cleanup";
 import {
   promoteToEncyclopedia as promoteToEncyclopediaFn,
   listEncyclopedia as listEncyclopediaFn,
@@ -52,6 +50,14 @@ import {
   type ServerResult,
 } from "@/lib/global-state-types";
 import { loadGlobalDocumentState } from "@/server/global-state-service";
+import {
+  buildStoragePath,
+  uploadFileToBucket,
+  getSignedUrl,
+  getDownloadSignedUrl,
+  deleteStorageFile,
+  deleteStorageFiles,
+} from "@/server/storage";
 
 const TEXT_EXTENSIONS = new Set(["txt", "md", "markdown", "json", "yaml", "yml"]);
 
@@ -85,38 +91,94 @@ function getExtension(fileName: string): string {
 }
 
 
-async function extractTextFromUpload(data: {
+/**
+ * Extract text from an uploaded file, optionally storing the original in
+ * Supabase Storage and routing PDFs through Firecrawl for clean extraction.
+ *
+ * Returns:
+ *  - text: extracted document content
+ *  - storagePath: path in corpus-uploads bucket (null for text files)
+ *  - isFirecrawlPrepped: true if content came from Firecrawl (PDF only)
+ */
+async function extractAndStoreUpload(data: {
   fileName: string;
   fileBase64: string;
-}): Promise<string> {
+  sessionId: string;
+  orgId: string | null;
+}): Promise<{
+  text: string;
+  storagePath: string | null;
+  isFirecrawlPrepped: boolean;
+}> {
   const ext = getExtension(data.fileName);
   const buffer = Buffer.from(data.fileBase64, "base64");
 
+  // Plain text files — no storage, no Firecrawl
   if (TEXT_EXTENSIONS.has(ext)) {
-    return buffer.toString("utf8");
+    return { text: buffer.toString("utf8"), storagePath: null, isFirecrawlPrepped: false };
   }
 
+  // Pre-allocate a document ID for the storage path
+  const tempDocId = crypto.randomUUID();
+
   if (ext === "pdf") {
-    const extractorMode = parsePdfExtractorMode(process.env.PDF_EXTRACTOR);
-    const extracted = await extractPdfText(buffer, {
-      mode: extractorMode,
-      logger: console,
+    const contentType = "application/pdf";
+    const storagePath = buildStoragePath(data.orgId, data.sessionId, tempDocId, data.fileName);
+
+    // Upload original to storage for provenance
+    await uploadFileToBucket(storagePath, buffer, contentType);
+
+    // Get a signed URL for Firecrawl
+    const signedUrl = await getSignedUrl(storagePath);
+
+    // Route through Firecrawl for clean markdown extraction
+    const apiKey = process.env.FIRECRAWL_API_KEY;
+    if (!apiKey) {
+      // Clean up the stored file since we can't proceed
+      await deleteStorageFile(storagePath);
+      fail("DEPENDENCY_ERROR", "Missing FIRECRAWL_API_KEY environment variable", 500);
+    }
+
+    const res = await fetch("https://api.firecrawl.dev/v2/scrape", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url: signedUrl,
+        onlyMainContent: false,
+        parsers: ["pdf"],
+        formats: ["markdown"],
+      }),
     });
-    const { text, telemetry } = cleanExtractedPdfTextWithTelemetry(extracted.text);
-    console.info("[pdf-cleanup]", {
-      fileName: data.fileName,
-      extractorMode,
-      extractorUsed: extracted.extractor,
-      fallbackUsed: extracted.fallbackUsed,
-      ...telemetry,
-    });
-    return text;
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      // Keep the stored file — user might retry
+      fail("DEPENDENCY_ERROR", `Firecrawl error ${res.status}: ${body.slice(0, 200)}`, 502);
+    }
+
+    const json = await res.json();
+    const markdown = json.data?.markdown;
+    if (!markdown?.trim()) {
+      fail("DEPENDENCY_ERROR", "Firecrawl returned empty content for uploaded PDF", 502);
+    }
+
+    return { text: markdown as string, storagePath, isFirecrawlPrepped: true };
   }
 
   if (ext === "docx") {
+    const contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    const storagePath = buildStoragePath(data.orgId, data.sessionId, tempDocId, data.fileName);
+
+    // Upload original to storage for provenance
+    await uploadFileToBucket(storagePath, buffer, contentType);
+
+    // Extract text with mammoth (Firecrawl doesn't handle DOCX well)
     const mammoth = await import("mammoth");
     const parsed = await mammoth.extractRawText({ buffer });
-    return parsed.value ?? "";
+    return { text: parsed.value ?? "", storagePath, isFirecrawlPrepped: false };
   }
 
   throw new Error("Unsupported file type. Use .txt, .md, .markdown, .json, .yaml, .yml, .pdf, or .docx");
@@ -443,7 +505,25 @@ export const removeSession = createServerFn({ method: "POST" })
     const user = await requireUser();
     const service = getSupabaseService();
     await requireOwnedSession(service, data.sessionId, user.id);
+
+    // Collect storage paths before cascade-deleting the session
+    const { data: docs } = await service
+      .from("corpus_session_documents")
+      .select("source_storage_path")
+      .eq("session_id", data.sessionId)
+      .not("source_storage_path", "is", null);
+
     await deleteSessionFn(service, data.sessionId);
+
+    // Best-effort bulk storage cleanup
+    if (docs?.length) {
+      const paths = docs
+        .map((d) => d.source_storage_path as string)
+        .filter(Boolean);
+      if (paths.length > 0) {
+        await deleteStorageFiles(paths);
+      }
+    }
   });
 
 // ─── Document operations ────────────────────────────────────────────────────
@@ -488,6 +568,7 @@ export const insertDocForParse = createServerFn({ method: "POST" })
       sessionId: string;
       sourceText: string;
       sourceFileName?: string;
+      sourceStoragePath?: string;
     }) => data,
   )
   .handler(async ({ data }) => {
@@ -499,6 +580,7 @@ export const insertDocForParse = createServerFn({ method: "POST" })
     return await insertDocumentForParseFn(service, data.sessionId, data.sourceText, {
       sourceFileName: data.sourceFileName,
       userId: user.id,
+      sourceStoragePath: data.sourceStoragePath,
     });
   });
 
@@ -508,6 +590,7 @@ export const insertDocForParseResult = createServerFn({ method: "POST" })
       sessionId: string;
       sourceText: string;
       sourceFileName?: string;
+      sourceStoragePath?: string;
     }) => data,
   )
   .handler(async ({ data }) =>
@@ -518,6 +601,7 @@ export const insertDocForParseResult = createServerFn({ method: "POST" })
       return await insertDocumentForParseFn(service, data.sessionId, data.sourceText, {
         sourceFileName: data.sourceFileName,
         userId: user.id,
+        sourceStoragePath: data.sourceStoragePath,
       });
     }),
   );
@@ -527,15 +611,23 @@ export const extractUploadText = createServerFn({ method: "POST" })
     (data: {
       fileName: string;
       fileBase64: string;
+      sessionId: string;
     }) => data,
   )
   .handler(async ({ data }) => {
-    await requireUser();
-    const text = await extractTextFromUpload(data);
-    if (!text.trim()) {
+    const user = await requireUser();
+    const service = getSupabaseService();
+    const session = await requireOwnedSession(service, data.sessionId, user.id);
+    const result = await extractAndStoreUpload({
+      fileName: data.fileName,
+      fileBase64: data.fileBase64,
+      sessionId: data.sessionId,
+      orgId: (session.organization_id as string) ?? null,
+    });
+    if (!result.text.trim()) {
       throw new Error("No extractable text found in uploaded file");
     }
-    return { text };
+    return result;
   });
 
 export const extractUrlText = createServerFn({ method: "POST" })
@@ -621,16 +713,24 @@ export const extractUploadTextResult = createServerFn({ method: "POST" })
     (data: {
       fileName: string;
       fileBase64: string;
+      sessionId: string;
     }) => data,
   )
   .handler(async ({ data }) =>
     asServerResult(async () => {
-      await requireUser();
-      const text = await extractTextFromUpload(data);
-      if (!text.trim()) {
+      const user = await requireUser();
+      const service = getSupabaseService();
+      const session = await requireOwnedSession(service, data.sessionId, user.id);
+      const result = await extractAndStoreUpload({
+        fileName: data.fileName,
+        fileBase64: data.fileBase64,
+        sessionId: data.sessionId,
+        orgId: (session.organization_id as string) ?? null,
+      });
+      if (!result.text.trim()) {
         fail("VALIDATION_ERROR", "No extractable text found in uploaded file", 400);
       }
-      return { text };
+      return result;
     }),
   );
 
@@ -793,8 +893,12 @@ export const removeDocument = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const user = await requireUser();
     const service = getSupabaseService();
-    await requireOwnedDocument(service, data.documentId, user.id);
+    const doc = await requireOwnedDocument(service, data.documentId, user.id);
     await deleteDocumentFn(service, data.documentId);
+    // Best-effort storage cleanup
+    if (doc.source_storage_path) {
+      await deleteStorageFile(doc.source_storage_path);
+    }
   });
 
 export const removeDocumentResult = createServerFn({ method: "POST" })
@@ -803,9 +907,43 @@ export const removeDocumentResult = createServerFn({ method: "POST" })
     asServerResult(async () => {
       const user = await requireUser();
       const service = getSupabaseService();
-      await requireOwnedDocument(service, data.documentId, user.id);
+      const doc = await requireOwnedDocument(service, data.documentId, user.id);
       await deleteDocumentFn(service, data.documentId);
+      // Best-effort storage cleanup
+      if (doc.source_storage_path) {
+        await deleteStorageFile(doc.source_storage_path);
+      }
       return { removed: true };
+    }),
+  );
+
+// ─── Download Original ──────────────────────────────────────────────────────
+
+export const getDocumentDownloadUrl = createServerFn({ method: "POST" })
+  .inputValidator((data: { documentId: string }) => data)
+  .handler(async ({ data }) => {
+    const user = await requireUser();
+    const service = getSupabaseService();
+    const doc = await requireOwnedDocument(service, data.documentId, user.id);
+    if (!doc.source_storage_path) {
+      fail("VALIDATION_ERROR", "No original file stored for this document", 400);
+    }
+    const downloadUrl = await getDownloadSignedUrl(doc.source_storage_path);
+    return { downloadUrl, fileName: doc.source_filename };
+  });
+
+export const getDocumentDownloadUrlResult = createServerFn({ method: "POST" })
+  .inputValidator((data: { documentId: string }) => data)
+  .handler(async ({ data }) =>
+    asServerResult(async () => {
+      const user = await requireUser();
+      const service = getSupabaseService();
+      const doc = await requireOwnedDocument(service, data.documentId, user.id);
+      if (!doc.source_storage_path) {
+        fail("VALIDATION_ERROR", "No original file stored for this document", 400);
+      }
+      const downloadUrl = await getDownloadSignedUrl(doc.source_storage_path);
+      return { downloadUrl, fileName: doc.source_filename };
     }),
   );
 
