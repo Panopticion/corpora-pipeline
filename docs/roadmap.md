@@ -77,6 +77,23 @@ Hono-based API layer (Node/Bun) on top of existing pipeline and PostgREST RPC pr
 
 Rate limiting, usage metering, structured observability, and production telemetry.
 
+### Phase 6 — Source Normalization
+
+Automated source preprocessing before the chunking pipeline. Raw source files (PDF exports, web
+scrapes, OCR output) need structural cleanup before they're chunk-ready.
+
+Planned capabilities:
+
+- **OCR artifact cleanup** — ligature normalization, stray page headers/footers
+- **Table-of-contents removal** — detect and strip TOC sections that produce junk chunks
+- **Heading insertion** — identify documents with no heading structure and insert headings at topic
+  boundaries
+- **Heading level normalization** — demote H1 → H2, fill skipped levels
+- **Paragraph splitting** — break run-on walls of text at logical paragraph boundaries
+- **Chunk quality gates** — reject documents that produce too few chunks or oversized chunks
+
+Currently handled by manual preprocessing scripts. This phase automates them into the pipeline.
+
 ## Contributor Tasks
 
 Each phase includes scoped `good_first_contributions` tasks in the source roadmap file.

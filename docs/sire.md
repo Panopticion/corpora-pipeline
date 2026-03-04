@@ -119,7 +119,8 @@ sire:
 | Cross-framework mapping | `cross_framework_mapping`       |
 
 **`included`** — Keywords inside this domain. If a chunk has these terms, it's likely governed by
-this framework.
+this framework. Mine these from the source document itself — look for defined terms, section
+headings, and domain-specific vocabulary.
 
 ```yaml
 # GDPR corpus
@@ -129,8 +130,10 @@ included: [personal data, data subject, controller, processor, DPIA, consent]
 included: [PHI, ePHI, covered entity, business associate, minimum necessary]
 ```
 
-**`excluded`** — Keywords from a _different_ domain. If a chunk has these terms, it crossed a
-boundary.
+**`excluded`** — Keywords from a _different_ domain that indicate boundary bleed. Think of these as
+false-positive prevention: "If this term appears, the chunk was probably retrieved by semantic
+similarity to the wrong framework." Focus on terms that are unique identifiers for other domains,
+not generic compliance language.
 
 ```yaml
 # GDPR corpus excludes HIPAA terms
@@ -141,11 +144,35 @@ excluded: [data subject, controller, processor, GDPR, DPIA, lawful basis]
 ```
 
 **`relevant`** — Cross-framework references for topology expansion. Framework IDs or version
-aliases.
+aliases. These enable crosswalk discovery — when a user queries one framework, related chunks from
+mapped frameworks surface via topology expansion.
 
 ```yaml
 relevant: [ISO-27001:A.8, SOC2:CC6.1, CCPA]
 ```
+
+### Mining Tags from Source Documents
+
+The best S.I.R.E. tags come directly from the source material:
+
+1. **Scan defined terms** — most regulatory documents have a "Definitions" section. Every defined
+   term is an `included` candidate.
+2. **Check section headings** — heading text often contains the domain's core vocabulary.
+3. **Identify unique identifiers** — terms like "covered entity" (HIPAA), "data subject" (GDPR), or
+   "trust services criteria" (SOC 2) are domain-specific. Put your domain's terms in `included`, and
+   other domains' unique terms in `excluded`.
+4. **Avoid generic terms in `excluded`** — words like "encryption," "access control," or "audit"
+   appear across every framework. Excluding them would purge legitimate chunks.
+
+### Common Authoring Mistakes
+
+| Mistake                                  | Problem                                            | Fix                                                        |
+| ---------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------- |
+| Generic terms in `excluded`              | "encryption" excluded → purges your own chunks     | Only exclude terms unique to _other_ domains               |
+| Empty `included` on a framework corpus   | No search enrichment — pure semantic only          | Mine 5–15 defined terms from source                        |
+| Copy-paste `excluded` across all corpora | Same exclusions everywhere defeats the purpose     | Each corpus needs exclusions for the frameworks it's _not_ |
+| Over-broad `excluded` list (20+ terms)   | Aggressive purging → too many false negatives      | Keep to 5–10 high-signal unique identifiers                |
+| Missing `relevant` on related frameworks | No topology expansion → crosswalk discovery broken | Add framework IDs that share controls with this corpus     |
 
 ### When `excluded` Should Be Empty
 

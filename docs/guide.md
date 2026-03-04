@@ -273,6 +273,28 @@ for internal audit trails.
 **HMAC mode:** Only holders of the secret can generate valid signatures. Set `WATERMARK_SECRET` for
 production deployments where forgery resistance matters.
 
+## Source Preparation
+
+The pipeline expects **chunk-ready Markdown** — documents with clean heading structure, no OCR
+artifacts, and normalized heading levels. Raw source files (PDF exports, Firecrawl scrapes, OCR
+output) rarely meet this bar.
+
+Before ingestion, source documents should be:
+
+1. **Clean** — no OCR ligatures, page headers/footers, or table-of-contents noise
+2. **Headed** — H2 (`##`) for major topics, H3 (`###`) for subtopics
+3. **Normalized** — heading levels start at H2 (no H1 in the body) and don't skip levels
+4. **Paragraph-split** — no run-on walls of text without heading breaks
+
+If your source files come from PDF extraction or web scraping, expect to run cleanup passes before
+they're ready for the chunking pipeline. Documents that enter the pipeline without heading structure
+produce a single chunk containing the entire body. The sub-splitter will break it at 500-word
+sentence boundaries, but these mechanical splits break mid-thought and produce poor embeddings.
+
+See the
+[Authoring Guide](https://github.com/Panopticion/corpora-pipeline/blob/main/corpora/AUTHORING.md)
+for detailed source readiness requirements and writing guidelines.
+
 ## Chunking Algorithm
 
 Corpus documents are split using a heading-aware algorithm:
@@ -280,15 +302,23 @@ Corpus documents are split using a heading-aware algorithm:
 1. Split on `##` (H2) headings → chunk boundaries
 2. Split on `###` (H3) headings → sub-chunk boundaries
 3. Merge chunks < **75 words** into predecessor
+4. Sub-split chunks > **500 words** at sentence boundaries (`. `) to stay within the embedding
+   window
 
-| Constant               | Value                    | Effect                |
-| ---------------------- | ------------------------ | --------------------- |
-| `MIN_CHUNK_WORDS`      | 75                       | Merge threshold       |
-| `EMBEDDING_MODEL`      | `text-embedding-3-large` | OpenAI model          |
-| `EMBEDDING_DIMENSIONS` | 512                      | Matryoshka truncation |
-| `CLAIM_BATCH_SIZE`     | 50                       | Chunks per claim RPC  |
-| `LEASE_SECONDS`        | 600                      | Lease before re-claim |
-| `EMBED_BATCH_SIZE`     | 20                       | Texts per OpenAI call |
+| Constant               | Value                    | Effect                                    |
+| ---------------------- | ------------------------ | ----------------------------------------- |
+| `MIN_CHUNK_WORDS`      | 75                       | Below this → merge into predecessor       |
+| `MAX_CHUNK_WORDS`      | 500                      | Above this → sub-split at sentence breaks |
+| `EMBEDDING_MODEL`      | `text-embedding-3-large` | OpenAI model                              |
+| `EMBEDDING_DIMENSIONS` | 512                      | Matryoshka truncation                     |
+| `CLAIM_BATCH_SIZE`     | 50                       | Chunks per claim RPC                      |
+| `LEASE_SECONDS`        | 600                      | Lease before re-claim                     |
+| `EMBED_BATCH_SIZE`     | 20                       | Texts per OpenAI call                     |
+
+::: warning Oversized Chunks If a document produces chunks significantly larger than 500 words, it
+likely has poor heading structure. The sub-splitter will break at sentence boundaries, but
+mid-thought splits degrade embedding quality. Fix the source headings rather than relying on
+sub-splitting. :::
 
 ## Corpus Document Format
 

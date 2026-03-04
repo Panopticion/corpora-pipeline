@@ -117,6 +117,26 @@ sire:
 - `excluded` keywords should be terms that would indicate a _different_ domain's content
 - `relevant` holds cross-framework references for topological expansion
 
+**How to mine tags from source documents:**
+
+1. **Scan the "Definitions" section** — most regulatory documents define their key terms. Every
+   defined term is an `included` candidate.
+2. **Check section headings** — heading text contains domain vocabulary.
+3. **Identify unique identifiers** — terms like "covered entity" (HIPAA), "data subject" (GDPR), or
+   "trust services criteria" (SOC 2) are domain-specific. Your domain's unique terms go in
+   `included`. Other domains' unique terms go in `excluded`.
+4. **Avoid generic terms in `excluded`** — words like "encryption," "access control," or "audit"
+   span every framework. Excluding them purges your own chunks.
+
+**Common mistakes:**
+
+| Mistake                                | Problem                                          | Fix                                                    |
+| -------------------------------------- | ------------------------------------------------ | ------------------------------------------------------ |
+| Generic terms in `excluded`            | Purges your own chunks                           | Only exclude terms unique to _other_ domains           |
+| Empty `included` on a framework corpus | No search enrichment — semantic-only discovery   | Mine 5–15 defined terms from source                    |
+| Same `excluded` list on every corpus   | Same exclusions everywhere defeats the purpose   | Each corpus needs exclusions for frameworks it's _not_ |
+| Over-broad `excluded` (20+ terms)      | Too many false negatives from aggressive purging | Keep to 5–10 high-signal unique identifiers            |
+
 **Example: GDPR corpus excludes HIPAA terms**
 
 ```yaml
@@ -147,6 +167,42 @@ industries: [fintech, healthcare]
 ```
 
 The parser reads these as string arrays. No quotes needed around values.
+
+---
+
+## Source Readiness
+
+Before the pipeline can chunk and embed a corpus, the source Markdown must meet structural
+requirements. Raw source files — PDF exports, web scrapes, OCR output — rarely meet this bar without
+preprocessing.
+
+### What "Chunk-Ready" Means
+
+A corpus document is chunk-ready when:
+
+1. **Heading structure exists** — at least one `##` (H2) heading in the body
+2. **Clean text** — no OCR ligatures (`ﬁ` → `fi`), page headers/footers, or repeated title noise
+3. **Normalized heading levels** — levels start at H2, don't skip levels (no H2 → H4)
+4. **No table-of-contents blocks** — TOC sections with bare heading text generate junk chunks
+5. **Paragraph breaks** — no walls of 2,000+ words without a heading boundary
+
+### Readiness Checks
+
+| Condition                          | Status  | Action                                      |
+| ---------------------------------- | ------- | ------------------------------------------- |
+| Body has ≥ 1 `##` heading          | Ready   | Proceed to ingestion                        |
+| Body has no headings at all        | Blocked | Insert heading structure before ingestion   |
+| Headings exist but start at H1     | Warning | Demote all headings by one level (H1 → H2)  |
+| Heading levels skip (H2 → H4)      | Warning | Fill gaps or normalize to sequential levels |
+| File > 50k chars but ≤ 3 headings  | Warning | Source likely needs heading insertion       |
+| Contains TOC / "Table of Contents" | Warning | Remove TOC section before ingestion         |
+
+### What Happens Without Readiness
+
+If a 600KB document enters the pipeline with no `##` headings, the chunker produces a **single
+chunk** containing the entire body. It will be sub-split at sentence boundaries (every 500 words),
+but these mechanical splits break mid-thought and produce poor embeddings. The pipeline won't error
+— the chunks are technically valid — but retrieval quality will be poor.
 
 ---
 
@@ -425,8 +481,9 @@ checks frontmatter fields for substantive differences.
 
 ## Checklist
 
-Before submitting an corpus:
+Before submitting a corpus:
 
+- [ ] Source is chunk-ready (has heading structure, clean text, normalized levels)
 - [ ] `corpus_id` is a unique URL-safe slug
 - [ ] `tier` matches the authority level of the source
 - [ ] `version` is bumped if content changed substantively
